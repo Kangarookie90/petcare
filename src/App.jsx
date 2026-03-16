@@ -204,14 +204,12 @@ export default function App() {
         }
         /* Main content */
         .main {
-          flex: 1;
-          padding: 28px 20px 100px;
-          position: relative;
-          z-index: 1;
-          max-width: 680px;
-          margin: 0 auto;
-          width: 100%;
-        }
+            flex: 1;
+            padding: 28px 22px 110px;
+            position: relative;
+            z-index: 1;
+            width: 100%;
+                }
         /* Bottom nav — mobile */
         .bottom-nav {
           position: fixed;
@@ -297,10 +295,6 @@ export default function App() {
             margin-left: 240px;
             padding: 40px 40px 40px;
           }
-        }
-        @media (min-width: 1200px) {
-          .main { max-width: 800px; }
-        }
       `}</style>
 
       {/* Background atmosphere */}
