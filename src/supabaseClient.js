@@ -1,10 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
 
-// Carica le variabili dal file .env di questa specifica cartella
-dotenv.config()
-
-const supabaseUrl = process.env.SUPABASE_URL
-const supabaseKey = process.env.SUPABASE_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseKey)

@@ -354,10 +354,10 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
   };
 
   const glass = {
-    background: 'rgba(255,255,255,0.48)',
+    background: 'var(--card-bg)',
     border: '1px solid rgba(255,255,255,0.8)',
     borderRadius: 20,
-    boxShadow: '0 2px 0 rgba(255,255,255,0.92) inset, 0 8px 32px rgba(80,120,200,0.15)',
+    boxShadow: 'var(--card-shadow)',
   };
 
   return (
@@ -367,8 +367,8 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
       <div style={{ ...glass, padding:'12px 16px', display:'flex', alignItems:'center', gap:12 }}>
         <span style={{ fontSize:22 }}>✏️</span>
         <div>
-          <div style={{ fontSize:13, fontWeight:600, color:'#0a1840' }}>Segna una zona critica</div>
-          <div style={{ fontSize:12, color:'rgba(20,50,130,0.55)', marginTop:2 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)' }}>Segna una zona critica</div>
+          <div style={{ fontSize:12, color:'var(--text-secondary)', marginTop:2 }}>
             Disegna o cerchia — riconoscimento istantaneo su {currentView.zones.length} zone
           </div>
         </div>
@@ -380,11 +380,11 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
           <button key={v.id} onClick={() => changeVista(v.id)} style={{
             flex:1, padding:'9px 6px', borderRadius:14, border:'none', cursor:'pointer',
             fontFamily:'inherit', fontSize:13, transition:'all 0.2s',
-            background: vista===v.id ? 'rgba(255,255,255,0.75)' : 'transparent',
-            color:      vista===v.id ? '#0a1840' : 'rgba(20,50,130,0.5)',
+            background: vista===v.id ? 'var(--card-border)' : 'transparent',
+            color:      vista===v.id ? 'var(--text-primary)' : 'var(--text-secondary)',
             fontWeight: vista===v.id ? 600 : 500,
             boxShadow:  vista===v.id
-              ? '0 2px 0 rgba(255,255,255,0.9) inset, 0 3px 10px rgba(80,120,200,0.15)'
+              ? 'var(--card-shadow-sm)'
               : 'none',
           }}>
             {v.icon} {v.label}
@@ -424,16 +424,16 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
               textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:7 }}>
               ⚡ Zona riconosciuta istantaneamente
             </div>
-            <div style={{ fontSize:16, fontWeight:700, color:'#0a1840', marginBottom:2 }}>
+            <div style={{ fontSize:16, fontWeight:700, color:'var(--text-primary)', marginBottom:2 }}>
               {result.name}
             </div>
-            <div style={{ fontSize:12, color:'rgba(20,50,130,0.6)', fontWeight:500, marginBottom:6 }}>
+            <div style={{ fontSize:12, color:'var(--text-secondary)', fontWeight:500, marginBottom:6 }}>
               {result.lato}
             </div>
-            <div style={{ fontSize:13, color:'#0f2050', lineHeight:1.5, marginBottom:6 }}>
+            <div style={{ fontSize:13, color:'var(--text-primary)', lineHeight:1.5, marginBottom:6 }}>
               {result.desc}
             </div>
-            <div style={{ fontSize:12, color:'rgba(20,50,130,0.65)', fontStyle:'italic' }}>
+            <div style={{ fontSize:12, color:'var(--text-secondary)', fontStyle:'italic' }}>
               💡 {result.tip}
             </div>
             <div style={{ fontSize:11, color:'#059669', marginTop:10, fontWeight:600 }}>
@@ -457,7 +457,7 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
       {/* Zone segnate */}
       {annotations.length > 0 && (
         <div style={{ ...glass, padding:'16px 18px' }}>
-          <div style={{ fontSize:11, fontWeight:600, color:'rgba(20,50,130,0.5)',
+          <div style={{ fontSize:11, fontWeight:600, color:'var(--text-secondary)',
             letterSpacing:'0.5px', textTransform:'uppercase', marginBottom:12 }}>
             📌 Zone segnate ({annotations.length})
           </div>
@@ -465,23 +465,23 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
             <div key={ann.id} style={{
               display:'flex', alignItems:'flex-start', gap:10,
               padding:'10px 12px', borderRadius:12, marginBottom:8,
-              background:'rgba(255,255,255,0.4)', border:'1px solid rgba(255,255,255,0.7)',
+              background:'var(--card-bg-sm)', border:'1px solid rgba(255,255,255,0.7)',
             }}>
               <div style={{ width:10, height:10, borderRadius:'50%', background:'#ef4444',
                 marginTop:3, flexShrink:0 }} />
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:'#0a1840' }}>{ann.zona}</div>
-                <div style={{ fontSize:11, color:'rgba(20,50,130,0.5)', marginTop:2 }}>
-                  Vista: {ann.vista} · {ann.descrizione}
+                <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)' }}>{ann.zona}</div>
+                <div style={{ fontSize:11, color:'var(--text-secondary)', marginTop:2 }}>
+                  Vista: {ann.vista} - {ann.descrizione}
                 </div>
                 {ann.suggerimento && (
-                  <div style={{ fontSize:11, color:'rgba(20,50,130,0.5)',
+                  <div style={{ fontSize:11, color:'var(--text-secondary)',
                     fontStyle:'italic', marginTop:3 }}>
                     💡 {ann.suggerimento}
                   </div>
                 )}
               </div>
-              <div style={{ fontSize:10, color:'rgba(20,50,130,0.4)', flexShrink:0 }}>
+              <div style={{ fontSize:10, color:'var(--text-muted)', flexShrink:0 }}>
                 {ann.data}
               </div>
             </div>
