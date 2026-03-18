@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 import PetBodyMap   from './PetBodyMap';
 
@@ -80,10 +81,20 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
   };
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(10,24,64,0.35)',
-      backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(10,24,64,0.35)',
+        backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}
       onClick={e => e.target===e.currentTarget && onClose()}>
-      <div style={{...glass,padding:24,width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto'}}>
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+        style={{...glass,padding:24,width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
           <div style={{fontSize:18,fontWeight:700,color:'var(--text-primary)'}}>🐾 Nuovo animale</div>
           <button onClick={onClose} style={{background:'var(--card-bg-sm)',border:'1px solid rgba(255,255,255,0.7)',
@@ -154,8 +165,8 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
             {loading?'Salvataggio...':'+ Aggiungi animale'}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -192,7 +203,7 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const opPref = operatori.find(o => o.id === animale.operatore_preferito_id);
 
   return (
-    <div style={{maxWidth:720,margin:'0 auto'}}>
+    <motion.div style={{maxWidth:720,margin:'0 auto'}}>
       <div style={{marginBottom:14}}>
         <button onClick={onBack} style={{...btnSecondary,padding:'8px 14px',fontSize:13}}>← Indietro</button>
       </div>
@@ -299,7 +310,7 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
           </button>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -352,14 +363,20 @@ function ListaAnimali({ animali, loading, onSelect, onAdd }) {
         </div>
       ) : (
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {filtered.map(a=>(
-            <button key={a.id} onClick={()=>onSelect(a)} style={{
-              ...glassCard,display:'flex',alignItems:'center',gap:14,
-              padding:'14px 16px',cursor:'pointer',textAlign:'left',
-              width:'100%',fontFamily:'inherit',transition:'transform 0.15s',
-            }}
-              onMouseEnter={e=>e.currentTarget.style.transform='translateY(-1px)'}
-              onMouseLeave={e=>e.currentTarget.style.transform='translateY(0)'}
+          {filtered.map((a,i)=>(
+            <motion.button
+              key={a.id}
+              onClick={()=>onSelect(a)}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.25, ease: [0.22,1,0.36,1] }}
+              whileHover={{ scale: 1.01, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                ...glassCard,display:'flex',alignItems:'center',gap:14,
+                padding:'14px 16px',cursor:'pointer',textAlign:'left',
+                width:'100%',fontFamily:'inherit',
+              }}
             >
               <div style={{width:44,height:44,borderRadius:'50%',flexShrink:0,
                 background:'linear-gradient(145deg,rgba(90,171,255,0.2),rgba(32,96,221,0.12))',
@@ -387,7 +404,7 @@ function ListaAnimali({ animali, loading, onSelect, onAdd }) {
                 })()}
                 <div style={{fontSize:18,color:'var(--text-muted)'}}>›</div>
               </div>
-            </button>
+            </motion.button>
           ))}
         </div>
       )}
@@ -434,7 +451,9 @@ export default function PetView() {
   return (
     <>
       <ListaAnimali animali={animali} loading={loading} onSelect={setSelected} onAdd={()=>setShowModal(true)}/>
-      {showModal && <ModalAggiungi clienti={clienti} razze={razze} onClose={()=>setShowModal(false)} onSaved={handleSaved}/>}
+      <AnimatePresence>
+        {showModal && <ModalAggiungi clienti={clienti} razze={razze} onClose={()=>setShowModal(false)} onSaved={handleSaved}/>}
+      </AnimatePresence>
     </>
   );
 }

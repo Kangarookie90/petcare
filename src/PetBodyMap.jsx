@@ -12,6 +12,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import dogSideImg  from './assets/dog-side.png';
 import dogHeadImg  from './assets/dog-head.png';
 import dogBellyImg from './assets/dog-belly.png';
@@ -377,28 +378,35 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
       {/* Selettore vista */}
       <div style={{ ...glass, padding:'6px', display:'flex', gap:4 }}>
         {VIEWS.map(v => (
-          <button key={v.id} onClick={() => changeVista(v.id)} style={{
-            flex:1, padding:'9px 6px', borderRadius:14, border:'none', cursor:'pointer',
-            fontFamily:'inherit', fontSize:13, transition:'all 0.2s',
-            background: vista===v.id ? 'var(--card-border)' : 'transparent',
-            color:      vista===v.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontWeight: vista===v.id ? 600 : 500,
-            boxShadow:  vista===v.id
-              ? 'var(--card-shadow-sm)'
-              : 'none',
-          }}>
+          <motion.button
+            key={v.id}
+            onClick={() => changeVista(v.id)}
+            whileTap={{ scale: 0.95 }}
+            style={{
+              flex:1, padding:'9px 6px', borderRadius:14, border:'none', cursor:'pointer',
+              fontFamily:'inherit', fontSize:13, transition:'background 0.2s, color 0.2s',
+              background: vista===v.id ? 'var(--card-border)' : 'transparent',
+              color:      vista===v.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontWeight: vista===v.id ? 600 : 500,
+              boxShadow:  vista===v.id ? 'var(--card-shadow-sm)' : 'none',
+            }}
+          >
             {v.icon} {v.label}
-          </button>
+          </motion.button>
         ))}
       </div>
 
       {/* Area disegno */}
       <div style={{ ...glass, padding:14 }}>
         <div style={{ position:'relative', width:'100%', borderRadius:14, overflow:'hidden', lineHeight:0 }}>
-          <img
+          <motion.img
+            key={vista}
             ref={imgRef}
             src={currentView.img}
             alt={`Sagoma ${vista}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.25 }}
             style={{ width:'100%', display:'block', borderRadius:14 }}
             onLoad={syncSize}
           />
@@ -417,9 +425,15 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
         </div>
 
         {/* Risultato */}
+        <AnimatePresence>
         {result && (
-          <div style={{ marginTop:14, background:'rgba(59,130,246,0.08)',
-            border:'1px solid rgba(59,130,246,0.2)', borderRadius:14, padding:'14px 16px' }}>
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            style={{ marginTop:14, background:'rgba(59,130,246,0.08)',
+              border:'1px solid rgba(59,130,246,0.2)', borderRadius:14, padding:'14px 16px' }}>
             <div style={{ fontSize:10, fontWeight:700, color:'#2563eb',
               textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:7 }}>
               ⚡ Zona riconosciuta istantaneamente
@@ -439,8 +453,9 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
             <div style={{ fontSize:11, color:'#059669', marginTop:10, fontWeight:600 }}>
               ✅ Aggiunto automaticamente a "Zone critiche"
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Cancella */}
         {drawings.length > 0 && (
@@ -461,8 +476,13 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
             letterSpacing:'0.5px', textTransform:'uppercase', marginBottom:12 }}>
             📌 Zone segnate ({annotations.length})
           </div>
-          {annotations.map(ann => (
-            <div key={ann.id} style={{
+          {annotations.map((ann, i) => (
+            <motion.div
+              key={ann.id}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.25 }}
+              style={{
               display:'flex', alignItems:'flex-start', gap:10,
               padding:'10px 12px', borderRadius:12, marginBottom:8,
               background:'var(--card-bg-sm)', border:'1px solid rgba(255,255,255,0.7)',
@@ -484,7 +504,7 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
               <div style={{ fontSize:10, color:'var(--text-muted)', flexShrink:0 }}>
                 {ann.data}
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}

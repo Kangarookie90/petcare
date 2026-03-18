@@ -16,6 +16,7 @@
     "@fullcalendar/timegrid": "^6.1.20",
     "@supabase/supabase-js": "^2.99.2",
     "dotenv": "^17.3.1",
+    "framer-motion": "^12.38.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

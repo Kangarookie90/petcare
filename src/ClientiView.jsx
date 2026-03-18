@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 
 // ── Stili condivisi ───────────────────────────────────────────
@@ -55,7 +56,11 @@ const specieEmoji = s => s === 'gatto' ? '🐈' : s === 'coniglio' ? '🐇' : '�
 // ─────────────────────────────────────────────────────────────
 function ModalOverlay({ onClose, children, maxWidth = 520, zIndex = 200 }) {
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       style={{
         position: 'fixed', inset: 0, zIndex,
         background: 'rgba(10,24,64,0.4)',
@@ -65,13 +70,19 @@ function ModalOverlay({ onClose, children, maxWidth = 520, zIndex = 200 }) {
       }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{
-        ...glass, padding: 24, width: '100%',
-        maxWidth, maxHeight: '90vh', overflowY: 'auto',
-      }}>
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+        style={{
+          ...glass, padding: 24, width: '100%',
+          maxWidth, maxHeight: '90vh', overflowY: 'auto',
+        }}
+      >
         {children}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -617,9 +628,18 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
   );
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      style={{ maxWidth: 720, margin: '0 auto' }}
+    >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}
+      >
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>👤 Clienti</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{clienti.length} clienti registrati</div>
@@ -627,7 +647,7 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
         <button onClick={onAdd} style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
           <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Aggiungi cliente
         </button>
-      </div>
+      </motion.div>
 
       {/* Ricerca */}
       <div style={{ ...glassCard, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -658,14 +678,20 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map(c => (
-            <button key={c.id} onClick={() => onSelect(c)} style={{
-              ...glassCard, display: 'flex', alignItems: 'center', gap: 14,
-              padding: '14px 16px', cursor: 'pointer', textAlign: 'left',
-              width: '100%', fontFamily: 'inherit', transition: 'transform 0.15s',
-            }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+          {filtered.map((c, i) => (
+            <motion.button
+              key={c.id}
+              onClick={() => onSelect(c)}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.25, ease: [0.22,1,0.36,1] }}
+              whileHover={{ scale: 1.01, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                ...glassCard, display: 'flex', alignItems: 'center', gap: 14,
+                padding: '14px 16px', cursor: 'pointer', textAlign: 'left',
+                width: '100%', fontFamily: 'inherit',
+              }}
             >
               {/* Avatar iniziali */}
               <div style={{
@@ -698,11 +724,11 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
                 )}
                 <div style={{ fontSize: 18, color: 'var(--text-muted)' }}>›</div>
               </div>
-            </button>
+            </motion.button>
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -772,14 +798,16 @@ export default function ClientiView() {
         onSelect={setSelected}
         onAdd={() => setShowModal(true)}
       />
-      {showModal && (
-        <ModalAggiungiCliente
-          razze={razze}
-          operatori={operatori}
-          onClose={() => setShowModal(false)}
-          onSaved={handleClienteSaved}
-        />
-      )}
+      <AnimatePresence>
+        {showModal && (
+          <ModalAggiungiCliente
+            razze={razze}
+            operatori={operatori}
+            onClose={() => setShowModal(false)}
+            onSaved={handleClienteSaved}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

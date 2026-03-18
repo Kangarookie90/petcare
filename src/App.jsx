@@ -1,7 +1,28 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
 import PetView from './PetView';
 import ClientiView from './ClientiView';
+
+// ── Varianti animazione pagine ──────────────────────────────
+const pageVariants = {
+  initial: { opacity: 0, y: 14, scale: 0.99 },
+  animate: { opacity: 1, y: 0,  scale: 1,
+    transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] }
+  },
+  exit:    { opacity: 0, y: -8, scale: 0.99,
+    transition: { duration: 0.18, ease: [0.4, 0, 1, 1] }
+  },
+};
+
+// ── Varianti staggered list ─────────────────────────────────
+const listVariants = {
+  animate: { transition: { staggerChildren: 0.07 } },
+};
+const itemVariants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+};
 
 const NAV_ITEMS = [
   {
@@ -63,44 +84,66 @@ const NAV_ITEMS = [
 ];
 
 const OPERATORI_MOCK = [
-  { nome: "Luca", colore: "#2563eb", appuntamenti: 5 },
+  { nome: "Luca",  colore: "#2563eb", appuntamenti: 5 },
   { nome: "Marco", colore: "#059669", appuntamenti: 3 },
-  { nome: "Sara", colore: "#d97706", appuntamenti: 7 },
+  { nome: "Sara",  colore: "#d97706", appuntamenti: 7 },
 ];
 
 const PROSSIMI_MOCK = [
-  { ora: "09:00", cliente: "Famiglia Rossi", animale: "Rex", servizio: "Toeletta", operatore: "Luca", colore: "#2563eb" },
-  { ora: "10:30", cliente: "Famiglia Bianchi", animale: "Luna", servizio: "Bagno e Asciugatura", operatore: "Sara", colore: "#d97706" },
-  { ora: "11:00", cliente: "Famiglia Verdi", animale: "Milo", servizio: "Taglio", operatore: "Marco", colore: "#059669" },
-  { ora: "14:00", cliente: "Famiglia Ferrari", animale: "Kira", servizio: "Toeletta completa", operatore: "Sara", colore: "#d97706" },
+  { ora: "09:00", cliente: "Famiglia Rossi",   animale: "Rex",  servizio: "Toeletta",          operatore: "Luca",  colore: "#2563eb" },
+  { ora: "10:30", cliente: "Famiglia Bianchi", animale: "Luna", servizio: "Bagno e Asciugatura",operatore: "Sara",  colore: "#d97706" },
+  { ora: "11:00", cliente: "Famiglia Verdi",   animale: "Milo", servizio: "Taglio",             operatore: "Marco", colore: "#059669" },
+  { ora: "14:00", cliente: "Famiglia Ferrari", animale: "Kira", servizio: "Toeletta completa",  operatore: "Sara",  colore: "#d97706" },
 ];
 
 function HomeView() {
   const oggi = new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+
   return (
-    <div style={{ padding: "0 0 2rem" }}>
-      <div style={{ marginBottom: "1.5rem" }}>
+    <motion.div
+      style={{ padding: "0 0 2rem" }}
+      variants={listVariants}
+      initial="initial"
+      animate="animate"
+    >
+      {/* Header */}
+      <motion.div variants={itemVariants} style={{ marginBottom: "1.5rem" }}>
         <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 3px", textTransform: "capitalize", fontWeight: 500 }}>{oggi}</p>
         <h1 style={{ fontSize: 28, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.5px" }}>Buongiorno!</h1>
-      </div>
+      </motion.div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
+      {/* Stats */}
+      <motion.div variants={itemVariants} style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
         {[
           { value: "15",  sub: "oggi" },
           { value: "3",   sub: "in attesa", accent: "#d97706" },
           { value: "128", sub: "clienti",   accent: "#059669" },
         ].map((s) => (
-          <div key={s.sub} style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: 18, padding: "14px 12px", textAlign: "center", boxShadow: "var(--card-shadow)" }}>
+          <motion.div
+            key={s.sub}
+            whileHover={{ scale: 1.03, y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+            style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: 18, padding: "14px 12px", textAlign: "center", boxShadow: "var(--card-shadow)", cursor: "default" }}
+          >
             <p style={{ fontSize: 26, fontWeight: 700, color: s.accent || "var(--text-primary)", margin: 0, lineHeight: 1 }}>{s.value}</p>
             <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "3px 0 0", fontWeight: 500 }}>{s.sub}</p>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.5px", textTransform: "uppercase" }}>Operatori</p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 20 }}>
+      {/* Operatori */}
+      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.5px", textTransform: "uppercase" }}>Operatori</motion.p>
+      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 20 }}>
         {OPERATORI_MOCK.map((op) => (
-          <div key={op.nome} style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 13, boxShadow: "var(--card-shadow-sm)" }}>
+          <motion.div
+            key={op.nome}
+            variants={itemVariants}
+            whileHover={{ scale: 1.01, y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 13, boxShadow: "var(--card-shadow-sm)" }}
+          >
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: op.colore + "22", border: "2px solid " + op.colore + "55", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: op.colore, flexShrink: 0 }}>
               {op.nome[0]}
             </div>
@@ -109,14 +152,22 @@ function HomeView() {
               <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>{op.appuntamenti} appuntamenti oggi</p>
             </div>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: op.colore }} />
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.5px", textTransform: "uppercase" }}>Prossimi appuntamenti</p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+      {/* Appuntamenti */}
+      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.5px", textTransform: "uppercase" }}>Prossimi appuntamenti</motion.p>
+      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 9 }}>
         {PROSSIMI_MOCK.map((a, i) => (
-          <div key={i} style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--card-shadow-sm)" }}>
+          <motion.div
+            key={i}
+            variants={itemVariants}
+            whileHover={{ scale: 1.01, y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--card-shadow-sm)" }}
+          >
             <div style={{ minWidth: 42, textAlign: "center" }}>
               <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{a.ora}</p>
             </div>
@@ -126,32 +177,44 @@ function HomeView() {
               <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>{a.cliente} - {a.operatore}</p>
             </div>
             <div style={{ fontSize: 11, fontWeight: 600, background: a.colore + "22", color: a.colore, padding: "3px 9px", borderRadius: 20 }}>conf.</div>
-          </div>
+          </motion.div>
         ))}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 function PlaceholderView({ title, description }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, textAlign: "center", padding: "2rem" }}>
-      <h2 style={{ fontSize: 24, fontWeight: 700, color: "#0a1840", margin: "0 0 10px" }}>{title}</h2>
-      <p style={{ fontSize: 15, color: "rgba(20,50,130,0.5)", margin: 0, maxWidth: 280, lineHeight: 1.6 }}>{description}</p>
-    </div>
+    <motion.div
+      variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, textAlign: "center", padding: "2rem" }}
+    >
+      <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", margin: "0 0 10px" }}>{title}</h2>
+      <p style={{ fontSize: 15, color: "var(--text-secondary)", margin: 0, maxWidth: 280, lineHeight: 1.6 }}>{description}</p>
+    </motion.div>
   );
 }
 
 export default function App() {
   const [active, setActive] = useState("home");
 
+  const handleNav = (id) => {
+    // View Transitions API se supportata
+    if (document.startViewTransition) {
+      document.startViewTransition(() => setActive(id));
+    } else {
+      setActive(id);
+    }
+  };
+
   const renderView = () => {
     switch (active) {
-      case "home":       return <HomeView />;
-      case "calendario": return <PlaceholderView title="Calendario" description="Vista giornaliera con tutti gli appuntamenti." />;
-      case "clienti":    return <ClientiView />;
-      case "pet":        return <PetView />;
-      case "operatori":  return <PlaceholderView title="Operatori" description="Configura orari, servizi e disponibilita degli operatori." />;
+      case "home":       return <HomeView key="home" />;
+      case "calendario": return <PlaceholderView key="calendario" title="Calendario" description="Vista giornaliera con tutti gli appuntamenti." />;
+      case "clienti":    return <ClientiView key="clienti" />;
+      case "pet":        return <PetView key="pet" />;
+      case "operatori":  return <PlaceholderView key="operatori" title="Operatori" description="Configura orari, servizi e disponibilita degli operatori." />;
       default:           return null;
     }
   };
@@ -161,7 +224,7 @@ export default function App() {
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* ── LIGHT MODE (default) ── */
+        /* ── LIGHT MODE ── */
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
           min-height: 100vh;
@@ -199,7 +262,7 @@ export default function App() {
         .nav-item.active {
           background: rgba(255,255,255,0.65);
           color: #0a1e5e;
-          box-shadow: 0 2px 0 rgba(255,255,255,0.95) inset, 0 3px 10px rgba(60,100,200,0.18);
+          box-shadow: 0 2px 0 rgba(255,255,255,0.95) inset;
         }
 
         /* ── DARK MODE ── */
@@ -236,13 +299,6 @@ export default function App() {
             color: #c8e0ff;
             box-shadow: 0 1px 0 rgba(120,170,255,0.15) inset;
           }
-          /* Dark mode overrides for HomeView cards */
-          .home-card {
-            background: rgba(30,55,110,0.35) !important;
-            border: 1px solid rgba(100,150,255,0.18) !important;
-          }
-          .home-card p { color: #ddeeff !important; }
-          .home-card .sub { color: rgba(160,200,255,0.5) !important; }
         }
 
         /* ── LAYOUT ── */
@@ -338,52 +394,90 @@ export default function App() {
           font-family: inherit;
         }
         .nav-item svg { width: 22px; height: 22px; }
-        .nav-item span {
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.1px;
-        }
+        .nav-item span { font-size: 10px; font-weight: 600; letter-spacing: 0.1px; }
         @media (min-width: 640px) {
           .sidebar { display: flex; }
           .bottom-nav { display: none; }
           .main { margin-left: 240px; padding: 32px 36px 36px; }
+        }
+
+        /* ── View Transitions ── */
+        ::view-transition-old(root) {
+          animation: 200ms ease both vtOut;
+        }
+        ::view-transition-new(root) {
+          animation: 300ms cubic-bezier(0.22,1,0.36,1) both vtIn;
+        }
+        @keyframes vtOut {
+          to { opacity: 0; transform: scale(0.98); }
+        }
+        @keyframes vtIn {
+          from { opacity: 0; transform: scale(1.01) translateY(8px); }
         }
       `}</style>
 
       <div className="app-bg" />
 
       <div className="app-layout">
+        {/* Sidebar */}
         <nav className="sidebar">
           <div className="sidebar-logo">
             <div className="logo-icon">P</div>
             <span>PetCare</span>
           </div>
           {NAV_ITEMS.map((item) => (
-            <button
+            <motion.button
               key={item.id}
               className={"sidebar-item" + (active === item.id ? " active" : "")}
-              onClick={() => setActive(item.id)}
+              onClick={() => handleNav(item.id)}
+              whileHover={{ x: 3 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
             >
               {item.icon}
               {item.label}
-            </button>
+            </motion.button>
           ))}
         </nav>
 
+        {/* Main — AnimatePresence per transizioni tra pagine */}
         <main className="main">
-          {renderView()}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={active}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              style={{ height: "100%" }}
+            >
+              {renderView()}
+            </motion.div>
+          </AnimatePresence>
         </main>
 
+        {/* Bottom nav */}
         <nav className="bottom-nav">
           {NAV_ITEMS.map((item) => (
-            <button
+            <motion.button
               key={item.id}
               className={"nav-item" + (active === item.id ? " active" : "")}
-              onClick={() => setActive(item.id)}
+              onClick={() => handleNav(item.id)}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
             >
-              {item.icon}
+              <motion.span
+                animate={active === item.id
+                  ? { scale: [1, 1.2, 1] }
+                  : { scale: 1 }
+                }
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                style={{ display: "flex" }}
+              >
+                {item.icon}
+              </motion.span>
               <span>{item.label}</span>
-            </button>
+            </motion.button>
           ))}
         </nav>
       </div>
