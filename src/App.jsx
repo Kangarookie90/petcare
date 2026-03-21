@@ -3,16 +3,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
 import PetView from './PetView';
 import ClientiView from './ClientiView';
+import CalendarioView from './CalendarioView';
 
 // ── Varianti animazione pagine ──────────────────────────────
 const pageVariants = {
-  initial: { opacity: 0, y: 14, scale: 0.99 },
-  animate: { opacity: 1, y: 0,  scale: 1,
-    transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] }
-  },
-  exit:    { opacity: 0, y: -8, scale: 0.99,
-    transition: { duration: 0.18, ease: [0.4, 0, 1, 1] }
-  },
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.18, ease: 'easeOut' } },
+  exit:    { opacity: 0, transition: { duration: 0.12, ease: 'easeIn' } },
 };
 
 // ── Varianti staggered list ─────────────────────────────────
@@ -121,7 +118,7 @@ function HomeView() {
         ].map((s) => (
           <motion.div
             key={s.sub}
-            whileHover={{ scale: 1.03, y: -2 }}
+            whileHover={{ y: -2 }}
             whileTap={{ scale: 0.97 }}
             transition={{ type: "spring", stiffness: 400, damping: 20 }}
             style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: 18, padding: "14px 12px", textAlign: "center", boxShadow: "var(--card-shadow)", cursor: "default" }}
@@ -139,7 +136,7 @@ function HomeView() {
           <motion.div
             key={op.nome}
             variants={itemVariants}
-            whileHover={{ scale: 1.01, y: -1 }}
+            whileHover={{ y: -1 }}
             whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
             style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 13, boxShadow: "var(--card-shadow-sm)" }}
@@ -163,7 +160,7 @@ function HomeView() {
           <motion.div
             key={i}
             variants={itemVariants}
-            whileHover={{ scale: 1.01, y: -1 }}
+            whileHover={{ y: -1 }}
             whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
             style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--card-shadow-sm)" }}
@@ -198,20 +195,16 @@ function PlaceholderView({ title, description }) {
 
 export default function App() {
   const [active, setActive] = useState("home");
+  const [navHidden, setNavHidden] = useState(false);
 
   const handleNav = (id) => {
-    // View Transitions API se supportata
-    if (document.startViewTransition) {
-      document.startViewTransition(() => setActive(id));
-    } else {
-      setActive(id);
-    }
+    setActive(id);
   };
 
   const renderView = () => {
     switch (active) {
       case "home":       return <HomeView key="home" />;
-      case "calendario": return <PlaceholderView key="calendario" title="Calendario" description="Vista giornaliera con tutti gli appuntamenti." />;
+      case "calendario": return <CalendarioView />;
       case "clienti":    return <ClientiView key="clienti" />;
       case "pet":        return <PetView key="pet" />;
       case "operatori":  return <PlaceholderView key="operatori" title="Operatori" description="Configura orari, servizi e disponibilita degli operatori." />;
@@ -363,6 +356,10 @@ export default function App() {
           position: relative;
           z-index: 1;
           width: 100%;
+          transition: padding-bottom 0.3s ease;
+        }
+        .main.nav-hidden {
+          padding-bottom: 28px;
         }
         .bottom-nav {
           position: fixed;
@@ -398,22 +395,16 @@ export default function App() {
         @media (min-width: 640px) {
           .sidebar { display: flex; }
           .bottom-nav { display: none; }
+          .nav-toggle { display: none !important; }
           .main { margin-left: 240px; padding: 32px 36px 36px; }
+          .main.nav-hidden { padding: 32px 36px 36px; }
         }
 
         /* ── View Transitions ── */
-        ::view-transition-old(root) {
-          animation: 200ms ease both vtOut;
-        }
-        ::view-transition-new(root) {
-          animation: 300ms cubic-bezier(0.22,1,0.36,1) both vtIn;
-        }
-        @keyframes vtOut {
-          to { opacity: 0; transform: scale(0.98); }
-        }
-        @keyframes vtIn {
-          from { opacity: 0; transform: scale(1.01) translateY(8px); }
-        }
+        ::view-transition-old(root) { animation: 120ms ease both vtFadeOut; }
+        ::view-transition-new(root) { animation: 180ms ease both vtFadeIn; }
+        @keyframes vtFadeOut { to   { opacity: 0; } }
+        @keyframes vtFadeIn  { from { opacity: 0; } }
       `}</style>
 
       <div className="app-bg" />
@@ -441,8 +432,8 @@ export default function App() {
         </nav>
 
         {/* Main — AnimatePresence per transizioni tra pagine */}
-        <main className="main">
-          <AnimatePresence mode="wait">
+        <main className={"main" + (navHidden ? " nav-hidden" : "")}>
+          <AnimatePresence mode="sync">
             <motion.div
               key={active}
               variants={pageVariants}
@@ -456,30 +447,83 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        {/* Bottom nav */}
-        <nav className="bottom-nav">
-          {NAV_ITEMS.map((item) => (
+        {/* Bottone toggle nav — visibile solo quando nav è nascosta */}
+        <AnimatePresence>
+          {navHidden && (
             <motion.button
-              key={item.id}
-              className={"nav-item" + (active === item.id ? " active" : "")}
-              onClick={() => handleNav(item.id)}
-              whileTap={{ scale: 0.9 }}
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className="nav-toggle"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 400, damping: 28 }}
+              onClick={() => setNavHidden(false)}
+              style={{
+                position: "fixed", bottom: 16, left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 100,
+                background: "rgba(210,228,255,0.75)",
+                border: "1px solid rgba(255,255,255,0.85)",
+                borderRadius: 20,
+                padding: "8px 18px",
+                display: "flex", alignItems: "center", gap: 6,
+                cursor: "pointer", fontFamily: "inherit",
+                fontSize: 12, fontWeight: 600,
+                color: "rgba(20,50,130,0.8)",
+                backdropFilter: "blur(20px)",
+                boxShadow: "0 2px 0 rgba(255,255,255,0.9) inset, 0 4px 16px rgba(60,100,200,0.2)",
+              }}
             >
-              <motion.span
-                animate={active === item.id
-                  ? { scale: [1, 1.2, 1] }
-                  : { scale: 1 }
-                }
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                style={{ display: "flex" }}
-              >
-                {item.icon}
-              </motion.span>
-              <span>{item.label}</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M3 12h18M3 6h18M3 18h18"/>
+              </svg>
+              Menu
             </motion.button>
-          ))}
-        </nav>
+          )}
+        </AnimatePresence>
+
+        {/* Bottom nav */}
+        <AnimatePresence>
+          {!navHidden && (
+            <motion.nav
+              className="bottom-nav"
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            >
+              {NAV_ITEMS.map((item) => (
+                <motion.button
+                  key={item.id}
+                  className={"nav-item" + (active === item.id ? " active" : "")}
+                  onClick={() => handleNav(item.id)}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                >
+                  <motion.span
+                    animate={active === item.id ? { scale: [1, 1.2, 1] } : { scale: 1 }}
+                    transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ display: "flex" }}
+                  >
+                    {item.icon}
+                  </motion.span>
+                  <span>{item.label}</span>
+                </motion.button>
+              ))}
+              {/* Tasto nascondi */}
+              <motion.button
+                className="nav-item"
+                onClick={() => setNavHidden(true)}
+                whileTap={{ scale: 0.9 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                style={{ maxWidth: 36 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <path d="M19 9l-7 7-7-7"/>
+                </svg>
+              </motion.button>
+            </motion.nav>
+          )}
+        </AnimatePresence>
       </div>
     </>
   );
