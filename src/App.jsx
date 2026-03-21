@@ -4,6 +4,8 @@ import { supabase } from './supabaseClient';
 import PetView from './PetView';
 import ClientiView from './ClientiView';
 import CalendarioView from './CalendarioView';
+import StatisticheView from './StatisticheView';
+import OperatoriView from './OperatoriView';
 
 // ── Varianti animazione pagine ──────────────────────────────
 const pageVariants = {
@@ -64,6 +66,15 @@ const NAV_ITEMS = [
         <path d="M12 2C9 2 7 4 7 6.5c0 1.5.5 2.8 1.5 3.5C6 11 4 13.5 4 16.5 4 19.5 6.5 22 12 22s8-2.5 8-5.5c0-3-2-5.5-4.5-6.5C16.5 9.3 17 8 17 6.5 17 4 15 2 12 2z" />
         <circle cx="9" cy="6" r="1" fill="currentColor" />
         <circle cx="15" cy="6" r="1" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    id: "statistiche",
+    label: "Statistiche",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 20V10M12 20V4M6 20v-6" />
       </svg>
     ),
   },
@@ -207,7 +218,8 @@ export default function App() {
       case "calendario": return <CalendarioView />;
       case "clienti":    return <ClientiView key="clienti" />;
       case "pet":        return <PetView key="pet" />;
-      case "operatori":  return <PlaceholderView key="operatori" title="Operatori" description="Configura orari, servizi e disponibilita degli operatori." />;
+      case "operatori":    return <OperatoriView key="operatori" />;
+      case "statistiche":  return <StatisticheView key="statistiche" />;
       default:           return null;
     }
   };

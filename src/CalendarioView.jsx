@@ -119,7 +119,7 @@ function FormNuovoCliente({ onSaved, onCancel }) {
 // MODAL NUOVO ANIMALE (inline nel form appuntamento)
 // ─────────────────────────────────────────────────────────────
 function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
-  const [f, setF] = useState({ nome: '', specie: 'cane', razza: '' });
+  const [f, setF] = useState({ nome: '', specie: 'cane', razza_id: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cercaRazza, setCercaRazza] = useState('');
@@ -130,18 +130,18 @@ function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
     .filter(r => r.specie === f.specie)
     .filter(r => r.nome.toLowerCase().includes(cercaRazza.toLowerCase()));
 
-  const razzaSelezionata = f.razza ? { nome: f.razza } : null;
+  const razzaSelezionata = razze.find(r => r.id === f.razza_id) || null;
 
   const save = async () => {
     if (!f.nome.trim()) { setError('Inserisci il nome'); return; }
     if (!clienteId) { setError('Cliente non valido'); return; }
     setLoading(true); setError('');
     const { data, error: err } = await supabase.from('animali')
-      .insert([{ cliente_id: clienteId, nome: f.nome.trim(), specie: f.specie, razza: f.razza || null }])
-      .select().single();
+      .insert([{ cliente_id: clienteId, nome: f.nome.trim(), specie: f.specie, razza_id: f.razza_id || null }])
+      .select('*, razze(id,nome)').single();
     if (err) { setLoading(false); setError(err.message); return; }
     setLoading(false);
-    onSaved({ ...data, razze: f.razza ? { nome: f.razza } : null });
+    onSaved(data);
   };
 
   return (
@@ -149,7 +149,7 @@ function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
-      style={{ ...glassCard, padding: 16, marginTop: 10, overflow: 'hidden' }}
+      style={{ ...glassCard, padding: 16, marginTop: 10, overflow: 'visible' }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Nuovo animale</div>
 
@@ -168,7 +168,7 @@ function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
       {/* Specie */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         {['cane', 'gatto', 'altro'].map(s => (
-          <button key={s} onClick={() => { set('specie', s); set('razza', ''); setCercaRazza(''); }} style={{
+          <button key={s} onClick={() => { set('specie', s); set('razza_id', ''); setCercaRazza(''); }} style={{
             flex: 1, padding: '8px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
             fontSize: 12, fontWeight: 600, border: '1px solid var(--card-border)',
             background: f.specie === s ? 'rgba(255,255,255,0.65)' : 'transparent',
@@ -180,12 +180,12 @@ function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
       </div>
 
       {/* Ricerca razza */}
-      <div style={{ marginBottom: 12, position: 'relative' }}>
+      <div style={{ marginBottom: 12, position: 'relative', zIndex: 1000 }}>
         <div style={secLabel}>Razza</div>
         {razzaSelezionata ? (
           <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{razzaSelezionata.nome}</span>
-            <button onClick={() => { set('razza', ''); setCercaRazza(''); }}
+            <button onClick={() => { set('razza_id', ''); setCercaRazza(''); }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)' }}>×</button>
           </div>
         ) : (
@@ -209,7 +209,7 @@ function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
                 {razzeFiltered.slice(0, 10).map(r => (
                   <button key={r.id}
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => { set('razza', r.nome); setCercaRazza(r.nome); setShowRazzeList(false); }}
+                    onClick={() => { set('razza_id', r.id); setCercaRazza(r.nome); setShowRazzeList(false); }}
                     style={{ display: 'block', width: '100%', padding: '10px 14px',
                       background: 'none', border: 'none',
                       borderBottom: '1px solid var(--card-border)',
@@ -262,17 +262,29 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   const [showNuovoCliente, setShowNuovoCliente] = useState(false);
   const [showNuovoAnimale, setShowNuovoAnimale] = useState(false);
 
+  // Estrai IDs dagli oggetti join (Supabase restituisce oggetti nested, non ID diretti)
+  const initClienteId   = appuntamento?.clienti?.id   || appuntamento?.cliente_id   || '';
+  const initAnimaleId   = appuntamento?.animali?.id   || appuntamento?.animale_id   || '';
+  const initOperatoreId = appuntamento?.operatori?.id || appuntamento?.operatore_id || '';
+  const initData = appuntamento?.inizio
+    ? new Date(appuntamento.inizio).toISOString().split('T')[0]
+    : dataInizio ? dataInizio.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+  const initOra = appuntamento?.inizio
+    ? new Date(appuntamento.inizio).toTimeString().slice(0,5)
+    : dataInizio ? dataInizio.toTimeString().slice(0,5) : '09:00';
+
   const [f, setF] = useState({
-    cliente_id:   appuntamento?.cliente_id   || '',
-    animale_id:   appuntamento?.animale_id   || '',
-    operatore_id: appuntamento?.operatore_id || '',
-    servizi_ids:  appuntamento?.servizi_ids  || [],
-    data:         dataInizio ? dataInizio.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    ora_inizio:   dataInizio ? dataInizio.toTimeString().slice(0,5) : '09:00',
-    durata_minuti: appuntamento?.durata_minuti || 60,
-    durata_auto:  true,
-    note:         appuntamento?.note || '',
-    stato:        appuntamento?.stato || 'confermato',
+    cliente_id:    initClienteId,
+    animale_id:    initAnimaleId,
+    operatore_id:  initOperatoreId,
+    servizi_ids:   appuntamento?.servizi_ids || [],
+    data:          initData,
+    ora_inizio:    initOra,
+    durata_minuti: 60,
+    durata_auto:   true,
+    note:          appuntamento?.note || '',
+    stato:         appuntamento?.stato || 'confermato',
+    blocco_orario: false,
   });
   const [loading, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -335,8 +347,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   };
 
   const save = async () => {
-    if (!f.cliente_id) { setError('Seleziona un cliente'); return; }
-    if (!f.animale_id) { setError('Seleziona un animale'); return; }
+    if (!f.blocco_orario && !f.cliente_id) { setError('Seleziona un cliente o attiva "Blocca orario"'); return; }
+    if (!f.blocco_orario && !f.animale_id) { setError('Seleziona un animale'); return; }
     if (!f.operatore_id) { setError('Seleziona un operatore'); return; }
     setSaving(true); setError('');
 
@@ -344,13 +356,12 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     const fine   = new Date(inizio.getTime() + f.durata_minuti * 60000);
 
     const payload = {
-      cliente_id:    f.cliente_id,
-      animale_id:    f.animale_id,
+      cliente_id:    f.blocco_orario ? null : f.cliente_id,
+      animale_id:    f.blocco_orario ? null : f.animale_id,
       operatore_id:  f.operatore_id,
       servizio_id:   f.servizi_ids[0] || null,  // primo servizio come principale
       inizio:        inizio.toISOString(),
       fine:          fine.toISOString(),
-      durata_minuti: Number(f.durata_minuti),
       note:          f.note.trim() || null,
       stato:         f.stato,
     };
@@ -454,8 +465,38 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           </div>
         </div>
 
+        {/* Toggle blocco orario */}
+        <div style={{ marginBottom: 16 }}>
+          <button
+            onClick={() => set('blocco_orario', !f.blocco_orario)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+              padding: '11px 14px', borderRadius: 12, cursor: 'pointer',
+              fontFamily: 'inherit', textAlign: 'left',
+              border: `1px solid ${f.blocco_orario ? 'rgba(220,38,38,0.3)' : 'var(--card-border)'}`,
+              background: f.blocco_orario ? 'rgba(220,38,38,0.08)' : 'var(--card-bg-sm)',
+            }}
+          >
+            <div style={{
+              width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+              background: f.blocco_orario ? '#dc2626' : 'var(--card-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {f.blocco_orario && <span style={{ fontSize: 11, color: '#fff', lineHeight: 1 }}>✓</span>}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: f.blocco_orario ? '#dc2626' : 'var(--text-primary)' }}>
+                Blocca orario
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                Riserva lo slot senza associare un cliente
+              </div>
+            </div>
+          </button>
+        </div>
+
         {/* Ricerca cliente */}
-        <div style={{ marginBottom: 4 }}>
+        {!f.blocco_orario && <div style={{ marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <div style={secLabel}>Cliente *</div>
             {!showNuovoCliente && (
@@ -515,10 +556,10 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               />
             )}
           </AnimatePresence>
-        </div>
+        </div>}
 
         {/* Selezione animale */}
-        {f.cliente_id && (
+        {!f.blocco_orario && f.cliente_id && (
           <div style={{ marginBottom: 16, marginTop: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={secLabel}>Animale *</div>
@@ -701,7 +742,7 @@ export default function CalendarioView() {
   const [showModal,    setShowModal]    = useState(false);
   const [selectedAppt, setSelectedAppt] = useState(null);
   const [clickedDate,  setClickedDate]  = useState(null);
-  const [view,         setView]         = useState('timeGridWeek');
+  const [view,         setView]         = useState('timeGridDay');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -710,7 +751,7 @@ export default function CalendarioView() {
     const [op, ap] = await Promise.all([
       supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome'),
       supabase.from('appuntamenti').select(`
-        id, inizio, fine, stato, note, durata_minuti,
+        id, inizio, fine, stato, note,
         clienti(nome,cognome),
         animali(nome,specie),
         operatori(id,nome,cognome,colore)
@@ -860,7 +901,7 @@ export default function CalendarioView() {
           .fc .fc-button-active { background: var(--card-bg) !important; }
           .fc .fc-today-button { opacity: 0.8; }
           .fc-theme-standard td, .fc-theme-standard th { border-color: var(--card-border-sm) !important; }
-          .fc .fc-timegrid-slot { height: 22px; }
+          .fc .fc-timegrid-slot { min-height: 0; }
           .fc .fc-event {
             border-radius: 8px !important;
             font-size: 12px !important;
@@ -871,8 +912,7 @@ export default function CalendarioView() {
           }
           .fc .fc-event:hover { opacity: 0.85; }
           .fc .fc-col-header-cell { font-size: 13px; font-weight: 600; color: var(--text-primary); padding: 8px 0; }
-          .fc .fc-timegrid-axis { color: var(--text-muted); font-size: 10px; }
-          .fc .fc-timegrid-slot-label { font-size: 10px; }
+          .fc .fc-timegrid-axis { color: var(--text-muted); font-size: 11px; }
           .fc .fc-daygrid-day-number { color: var(--text-primary); font-size: 13px; }
           .fc .fc-day-today { background: rgba(37,99,235,0.05) !important; }
           .fc .fc-highlight { background: rgba(37,99,235,0.1) !important; }
@@ -895,10 +935,9 @@ export default function CalendarioView() {
             selectable={true}
             selectMirror={true}
             dayMaxEvents={3}
-            slotMinTime="00:00:00"
-            slotMaxTime="24:00:00"
+            slotMinTime="08:00:00"
+            slotMaxTime="20:00:00"
             slotDuration="01:00:00"
-            scrollTime="08:00:00"
             slotLabelInterval="01:00"
             allDaySlot={false}
             nowIndicator={true}
@@ -911,6 +950,7 @@ export default function CalendarioView() {
             dateClick={handleDateClick}
             eventDrop={handleEventDrop}
             height="calc(100vh - 200px)"
+            expandRows={true}
           />
         )}
       </motion.div>

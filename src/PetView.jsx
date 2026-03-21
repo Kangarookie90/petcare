@@ -150,7 +150,7 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
           </div>
         </div>
 
-        <div style={{marginBottom:20}}>
+        <div style={{marginBottom:14}}>
           <div style={secLabel}>Note iniziali</div>
           <textarea rows={3} placeholder="Carattere, abitudini, patologie note..."
             value={f.note} onChange={e=>set('note',e.target.value)}
@@ -171,6 +171,140 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// ZONE CRITICHE — tag eliminabili e modificabili
+// ─────────────────────────────────────────────────────────────
+function ZoneCritiche({ animale, onUpdate }) {
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [editVal,    setEditVal]    = useState('');
+  const [nuova,      setNuova]      = useState('');
+  const [saving,     setSaving]     = useState(false);
+
+  // Parsa la stringa in array
+  const zone = animale.zone_critiche
+    ? animale.zone_critiche.split(',').map(z => z.trim()).filter(Boolean)
+    : [];
+
+  const saveZone = async (nuoveZone) => {
+    setSaving(true);
+    const str = nuoveZone.join(', ');
+    await supabase.from('animali').update({ zone_critiche: str || null }).eq('id', animale.id);
+    onUpdate({ ...animale, zone_critiche: str || null });
+    setSaving(false);
+  };
+
+  const elimina = (idx) => {
+    const nuove = zone.filter((_, i) => i !== idx);
+    saveZone(nuove);
+  };
+
+  const salvaModifica = (idx) => {
+    if (!editVal.trim()) { elimina(idx); setEditingIdx(null); return; }
+    const nuove = zone.map((z, i) => i === idx ? editVal.trim() : z);
+    saveZone(nuove);
+    setEditingIdx(null);
+  };
+
+  const aggiungi = () => {
+    if (!nuova.trim()) return;
+    saveZone([...zone, nuova.trim()]);
+    setNuova('');
+  };
+
+  return (
+    <div style={{...glass, padding:'15px 17px'}}>
+      <div style={{...secLabel, marginBottom: 12}}>⚠️ Zone critiche</div>
+
+      {zone.length === 0 ? (
+        <div style={{fontSize:13, color:'var(--text-muted)', marginBottom:12}}>
+          Nessuna zona critica registrata
+        </div>
+      ) : (
+        <div style={{display:'flex', flexDirection:'column', gap:8, marginBottom:12}}>
+          {zone.map((z, i) => (
+            <div key={i}>
+              {editingIdx === i ? (
+                <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                  <input
+                    autoFocus
+                    value={editVal}
+                    onChange={e => setEditVal(e.target.value)}
+                    onKeyDown={e => { if (e.key==='Enter') salvaModifica(i); if (e.key==='Escape') setEditingIdx(null); }}
+                    style={{...inputStyle, flex:1, padding:'8px 12px', fontSize:13}}
+                  />
+                  <button onClick={() => salvaModifica(i)} disabled={saving} style={{
+                    background:'linear-gradient(145deg,#5aabff,#2060dd)', color:'#fff',
+                    border:'none', borderRadius:10, padding:'8px 14px',
+                    fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+                    opacity: saving ? 0.7 : 1,
+                  }}>
+                    {saving ? '...' : 'Salva'}
+                  </button>
+                  <button onClick={() => setEditingIdx(null)} style={{
+                    background:'var(--input-bg)', color:'var(--text-secondary)',
+                    border:'1px solid var(--card-border)', borderRadius:10,
+                    padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:'inherit',
+                  }}>
+                    Annulla
+                  </button>
+                </div>
+              ) : (
+                <div style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  padding:'9px 12px', borderRadius:12,
+                  background:'rgba(239,68,68,0.07)',
+                  border:'1px solid rgba(239,68,68,0.15)',
+                }}>
+                  <div style={{width:8, height:8, borderRadius:'50%', background:'#ef4444', flexShrink:0}} />
+                  <span style={{flex:1, fontSize:13, fontWeight:500, color:'var(--text-primary)'}}>{z}</span>
+                  <button onClick={() => { setEditingIdx(i); setEditVal(z); }} style={{
+                    background:'rgba(37,99,235,0.1)', color:'#2563eb',
+                    border:'none', borderRadius:7, padding:'3px 9px',
+                    fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+                  }}>
+                    Modifica
+                  </button>
+                  <button onClick={() => elimina(i)} style={{
+                    background:'rgba(239,68,68,0.1)', color:'#dc2626',
+                    border:'none', borderRadius:7, padding:'3px 9px',
+                    fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+                  }}>
+                    Elimina
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Aggiungi zona manualmente */}
+      <div style={{display:'flex', gap:8}}>
+        <input
+          type="text"
+          placeholder="Aggiungi zona critica..."
+          value={nuova}
+          onChange={e => setNuova(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && aggiungi()}
+          style={{...inputStyle, flex:1, padding:'8px 12px', fontSize:13}}
+        />
+        <button onClick={aggiungi} disabled={!nuova.trim() || saving} style={{
+          background:'linear-gradient(145deg,#5aabff,#2060dd)', color:'#fff',
+          border:'none', borderRadius:10, padding:'8px 14px',
+          fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+          opacity: !nuova.trim() ? 0.4 : 1,
+          whiteSpace:'nowrap',
+        }}>
+          + Aggiungi
+        </button>
+      </div>
+      <div style={{fontSize:11, color:'var(--text-muted)', marginTop:6}}>
+        Le zone vengono aggiunte anche automaticamente dalla mappa corporea
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // SCHEDA SINGOLO ANIMALE
 // ─────────────────────────────────────────────────────────────
 function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
@@ -182,7 +316,6 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const CAMPI = [
     { field:'servizi_abituali',       label:'✂️ Servizi abituali' },
     { field:'preferenze_proprietario',label:'💬 Preferenze proprietario' },
-    { field:'zone_critiche',           label:'⚠️ Zone critiche' },
     { field:'problemi_salute',         label:'🏥 Problemi di salute' },
     { field:'problemi_carattere',      label:'🧠 Problemi caratteriali' },
   ];
@@ -247,6 +380,51 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
       {/* Scheda */}
       {tab==='scheda' && (
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+          {/* Operatore preferito */}
+          <div style={{...glass,padding:'15px 17px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
+              <div style={secLabel}>👤 Operatore preferito</div>
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              <button
+                onClick={async()=>{
+                  await supabase.from('animali').update({operatore_preferito_id:null}).eq('id',animale.id);
+                  onUpdate({...animale,operatore_preferito_id:null});
+                }}
+                style={{
+                  padding:'8px 14px',borderRadius:12,cursor:'pointer',fontFamily:'inherit',
+                  fontSize:13,fontWeight:600,border:'1px solid var(--card-border)',
+                  background:!animale.operatore_preferito_id?'rgba(37,99,235,0.15)':'var(--card-bg-sm)',
+                  color:!animale.operatore_preferito_id?'#2563eb':'var(--text-muted)',
+                }}>
+                Nessuna preferenza
+              </button>
+              {operatori.map(op=>(
+                <button key={op.id}
+                  onClick={async()=>{
+                    await supabase.from('animali').update({operatore_preferito_id:op.id}).eq('id',animale.id);
+                    onUpdate({...animale,operatore_preferito_id:op.id});
+                  }}
+                  style={{
+                    padding:'8px 14px',borderRadius:12,cursor:'pointer',fontFamily:'inherit',
+                    fontSize:13,fontWeight:600,border:'1px solid var(--card-border)',
+                    background:animale.operatore_preferito_id===op.id?'rgba(37,99,235,0.15)':'var(--card-bg-sm)',
+                    color:animale.operatore_preferito_id===op.id?'#2563eb':'var(--text-primary)',
+                    display:'flex',alignItems:'center',gap:8,
+                  }}>
+                  <div style={{width:20,height:20,borderRadius:'50%',
+                    background:op.colore||'#2563eb',
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:10,fontWeight:700,color:'#fff'}}>
+                    {op.nome[0]}
+                  </div>
+                  {op.nome}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {CAMPI.map(({field,label})=>(
             <div key={field} style={{...glass,padding:'15px 17px'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
@@ -275,6 +453,10 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
               )}
             </div>
           ))}
+
+          {/* Zone critiche con gestione tag */}
+          <ZoneCritiche animale={animale} onUpdate={onUpdate} />
+
         </div>
       )}
 
@@ -429,7 +611,7 @@ export default function PetView() {
   const fetchAll = async () => {
     setLoading(true);
     const [an, cl, op, rz] = await Promise.all([
-      supabase.from('animali').select('*, clienti(id,nome,cognome), razze(id,nome)').order('nome'),
+      supabase.from('animali').select('*, clienti(id,nome,cognome), razze(id,nome), operatori(id,nome,cognome)').order('nome'),
       supabase.from('clienti').select('id,nome,cognome').order('cognome'),
       supabase.from('operatori').select('id,nome,cognome').eq('attivo',true).order('nome'),
       supabase.from('razze').select('id,nome,specie').order('nome'),
