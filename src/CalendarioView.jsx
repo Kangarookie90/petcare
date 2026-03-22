@@ -277,7 +277,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     cliente_id:    initClienteId,
     animale_id:    initAnimaleId,
     operatore_id:  initOperatoreId,
-    servizi_ids:   appuntamento?.servizi_ids || [],
+    servizi_ids:   appuntamento?.servizi_ids || (appuntamento?.servizio_id ? [appuntamento.servizio_id] : []),
     data:          initData,
     ora_inizio:    initOra,
     durata_minuti: 60,
@@ -285,6 +285,9 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     note:          appuntamento?.note || '',
     stato:         appuntamento?.stato || 'confermato',
     blocco_orario: false,
+    prezzo_proposto:   appuntamento?.prezzo_proposto || '',
+    prezzo_confermato: appuntamento?.prezzo_confermato || '',
+    prezzo_confermato_flag: appuntamento?.prezzo_confermato_flag || false,
   });
   const [loading, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -295,7 +298,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   useEffect(() => {
     const load = async () => {
       const [cl, sv, rz] = await Promise.all([
-        supabase.from('clienti').select('id,nome,cognome,telefono').order('cognome'),
+        supabase.from('clienti').select('id,nome,cognome,telefono,prezzo_riservato').order('cognome'),
         supabase.from('servizi').select('id,nome,durata_minuti,prezzo').order('nome'),
         supabase.from('razze').select('id,nome,specie').order('nome'),
       ]);
@@ -364,16 +367,19 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       fine:          fine.toISOString(),
       note:          f.note.trim() || null,
       stato:         f.stato,
+      prezzo_proposto:   f.prezzo_proposto !== '' ? Number(f.prezzo_proposto) : null,
+      prezzo_confermato: f.prezzo_confermato !== '' ? Number(f.prezzo_confermato) : null,
+      prezzo_confermato_flag: f.prezzo_confermato_flag,
     };
 
     let result;
     if (isEdit) {
       result = await supabase.from('appuntamenti').update(payload).eq('id', appuntamento.id).select(`
-        *, clienti(nome,cognome), animali(nome,specie), operatori(nome,cognome,colore)
+        *, clienti(id,nome,cognome), animali(id,nome,specie), operatori(id,nome,cognome,colore)
       `).single();
     } else {
       result = await supabase.from('appuntamenti').insert([payload]).select(`
-        *, clienti(nome,cognome), animali(nome,specie), operatori(nome,cognome,colore)
+        *, clienti(id,nome,cognome), animali(id,nome,specie), operatori(id,nome,cognome,colore)
       `).single();
     }
 
@@ -390,7 +396,36 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     onClose();
   };
 
-  const clienteSelezionato = clienti.find(c => c.id === f.cliente_id);
+  // Cerca prima nella lista caricata, poi nel nested object dell'appuntamento (edit mode)
+  const clienteSelezionato = clienti.find(c => c.id === f.cliente_id)
+    || (appuntamento?.clienti?.id === f.cliente_id ? appuntamento.clienti : null);
+
+  // Quando cambia cliente, pre-carica prezzo_riservato — solo se non siamo in edit con prezzo già settato
+  useEffect(() => {
+    if (!f.cliente_id || !clienti.length) return;
+    // In edit non sovrascrivere il prezzo già salvato
+    if (isEdit && f.prezzo_proposto !== '') return;
+    const c = clienti.find(x => x.id === f.cliente_id);
+    if (c?.prezzo_riservato) {
+      set('prezzo_proposto', String(c.prezzo_riservato));
+    }
+  }, [f.cliente_id, clienti]);
+
+  // Quando cambiano i servizi, calcola prezzo — solo se non in edit con prezzo già settato
+  useEffect(() => {
+    if (f.servizi_ids.length === 0) return;
+    if (isEdit && f.prezzo_proposto !== '') return; // non sovrascrivere in edit
+    const cliente = clienti.find(x => x.id === f.cliente_id);
+    if (cliente?.prezzo_riservato) {
+      set('prezzo_proposto', String(cliente.prezzo_riservato));
+      return;
+    }
+    const tot = f.servizi_ids.reduce((acc, sid) => {
+      const s = servizi.find(x => x.id === sid);
+      return acc + Number(s?.prezzo || 0);
+    }, 0);
+    if (tot > 0) set('prezzo_proposto', String(tot));
+  }, [f.servizi_ids, servizi]);
 
   return (
     <motion.div
@@ -702,12 +737,99 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         </div>
 
         {/* Note */}
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 16 }}>
           <div style={secLabel}>Note</div>
           <textarea rows={3} placeholder="Note sull'appuntamento..."
             value={f.note} onChange={e => set('note', e.target.value)}
             style={{ ...inputStyle, resize: 'vertical' }} />
         </div>
+
+        {/* Prezzo */}
+        {!f.blocco_orario && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={secLabel}>Prezzo</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {/* Prezzo riservato (da anagrafica) */}
+              {clienteSelezionato?.prezzo_riservato && (
+                <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Riservato</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#2563eb' }}>
+                    € {Number(clienteSelezionato.prezzo_riservato).toFixed(2)}
+                  </div>
+                </div>
+              )}
+              {/* Prezzo proposto (modificabile) */}
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 5 }}>
+                  {clienteSelezionato?.prezzo_riservato ? 'Prezzo applicato' : 'Prezzo proposto'}
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
+                  <input type="number" min="0" step="0.50"
+                    placeholder="0.00"
+                    value={f.prezzo_proposto}
+                    onChange={e => set('prezzo_proposto', e.target.value)}
+                    style={{ ...inputStyle, paddingLeft: 26 }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Sezione conferma prezzo — solo in modifica e se completato */}
+            {isEdit && (
+              <div style={{ marginTop: 12, padding: '14px', borderRadius: 14,
+                background: f.prezzo_confermato_flag ? 'rgba(5,150,105,0.08)' : 'rgba(217,119,6,0.08)',
+                border: `1px solid ${f.prezzo_confermato_flag ? 'rgba(5,150,105,0.25)' : 'rgba(217,119,6,0.25)'}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: f.prezzo_confermato_flag ? '#059669' : '#d97706',
+                    textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {f.prezzo_confermato_flag ? '✓ Prezzo confermato' : 'Conferma prezzo finale'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
+                    <input type="number" min="0" step="0.50"
+                      placeholder={f.prezzo_proposto || '0.00'}
+                      value={f.prezzo_confermato}
+                      onChange={e => { set('prezzo_confermato', e.target.value); set('prezzo_confermato_flag', false); }}
+                      style={{ ...inputStyle, paddingLeft: 26,
+                        borderColor: f.prezzo_confermato_flag ? 'rgba(5,150,105,0.4)' : 'var(--card-border)' }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const val = f.prezzo_confermato || f.prezzo_proposto;
+                      set('prezzo_confermato', val);
+                      set('prezzo_confermato_flag', true);
+                    }}
+                    style={{
+                      padding: '10px 16px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 13, fontWeight: 700, border: 'none',
+                      background: f.prezzo_confermato_flag
+                        ? 'linear-gradient(145deg,#34d399,#059669)'
+                        : 'linear-gradient(145deg,#fbbf24,#d97706)',
+                      color: '#fff',
+                      boxShadow: f.prezzo_confermato_flag
+                        ? '0 4px 12px rgba(5,150,105,0.35)'
+                        : '0 4px 12px rgba(217,119,6,0.35)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {f.prezzo_confermato_flag ? '✓ Confermato' : 'Conferma'}
+                  </button>
+                </div>
+                {f.prezzo_confermato_flag && (
+                  <div style={{ fontSize: 11, color: '#059669', marginTop: 8, fontWeight: 500 }}>
+                    Prezzo finale registrato: € {Number(f.prezzo_confermato).toFixed(2)}
+                  </div>
+                )}
+              </div>
+            )}
+
+
+          </div>
+        )}
 
         {error && (
           <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 12,
@@ -751,10 +873,11 @@ export default function CalendarioView() {
     const [op, ap] = await Promise.all([
       supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome'),
       supabase.from('appuntamenti').select(`
-        id, inizio, fine, stato, note,
-        clienti(nome,cognome),
-        animali(nome,specie),
-        operatori(id,nome,cognome,colore)
+        id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
+        clienti(id,nome,cognome),
+        animali(id,nome,specie),
+        operatori(id,nome,cognome,colore),
+        servizi(id,nome)
       `).neq('stato', 'cancellato'),
     ]);
     const ops = op.data || [];
@@ -763,17 +886,27 @@ export default function CalendarioView() {
     setLoading(false);
   };
 
-  const apToEvents = (appts, ops) => appts.map((a, i) => {
+  const apToEvents = (appts, ops) => appts.map((a) => {
     const op = ops.find(o => o.id === a.operatori?.id) || a.operatori;
-    const colore = op?.colore || COLORI_OP[ops.findIndex(o => o.id === op?.id) % COLORI_OP.length] || '#2563eb';
+    const idx = ops.findIndex(o => o.id === (op?.id || a.operatori?.id));
+    const coloreBase = op?.colore || COLORI_OP[idx % COLORI_OP.length] || '#3b82f6';
+    const prezzoOk = a.prezzo_confermato_flag;
+    const animaleNome = a.animali?.nome || 'Animale';
+    const servizioNome = a.servizi?.nome || '';
+    const operatoreNome = op?.nome || '';
+    // Titolo: "Rex · Toeletta · Enrico" oppure "Rex · Enrico"
+    const parti = [animaleNome, servizioNome, operatoreNome].filter(Boolean);
+    const title = parti.join(' · ') + (prezzoOk ? ' ✦' : '');
     return {
-      id:             a.id,
-      title:          `${a.animali?.nome || ''} - ${a.clienti?.cognome || ''}`,
-      start:          a.inizio,
-      end:            a.fine,
-      backgroundColor: colore,
-      borderColor:    colore,
-      extendedProps:  { appuntamento: a },
+      id:              a.id,
+      title,
+      start:           a.inizio,
+      end:             a.fine,
+      backgroundColor: coloreBase + 'cc',
+      borderColor:     coloreBase,
+      textColor:       '#fff',
+      classNames:      prezzoOk ? ['ap-confermato'] : [],
+      extendedProps:   { appuntamento: a, coloreBase, prezzoOk },
     };
   });
 
@@ -904,13 +1037,18 @@ export default function CalendarioView() {
           .fc .fc-timegrid-slot { min-height: 0; }
           .fc .fc-event {
             border-radius: 8px !important;
-            font-size: 12px !important;
+            font-size: 11px !important;
             font-weight: 600 !important;
-            padding: 2px 6px !important;
-            border: none !important;
+            padding: 3px 6px !important;
             cursor: pointer !important;
           }
-          .fc .fc-event:hover { opacity: 0.85; }
+          .fc .fc-event .fc-event-title {
+            white-space: pre-wrap !important;
+            line-height: 1.35 !important;
+            font-size: 11px !important;
+          }
+          .fc .fc-event .fc-event-title-container { padding: 2px 0 !important; }
+          .fc .fc-event:hover { opacity: 0.88; transform: translateY(-1px); transition: all 0.12s ease; }
           .fc .fc-col-header-cell { font-size: 13px; font-weight: 600; color: var(--text-primary); padding: 8px 0; }
           .fc .fc-timegrid-axis { color: var(--text-muted); font-size: 11px; }
           .fc .fc-daygrid-day-number { color: var(--text-primary); font-size: 13px; }
@@ -937,7 +1075,7 @@ export default function CalendarioView() {
             dayMaxEvents={3}
             slotMinTime="08:00:00"
             slotMaxTime="20:00:00"
-            slotDuration="01:00:00"
+            slotDuration="00:30:00"
             slotLabelInterval="01:00"
             allDaySlot={false}
             nowIndicator={true}

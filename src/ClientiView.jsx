@@ -265,7 +265,7 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
 // ─────────────────────────────────────────────────────────────
 function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
   const [f, setF] = useState({
-    nome: '', cognome: '', telefono: '', email: '', indirizzo: '', note: '',
+    nome: '', cognome: '', telefono: '', email: '', indirizzo: '', note: '', prezzo_riservato: '',
   });
   const [animali, setAnimali] = useState([]);      // animali da aggiungere
   const [showPet, setShowPet] = useState(false);   // mostra modal animale nested
@@ -293,6 +293,7 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
         email: f.email.trim() || null,
         indirizzo: f.indirizzo.trim() || null,
         note: f.note.trim() || null,
+        prezzo_riservato: f.prezzo_riservato !== '' ? Number(f.prezzo_riservato) : null,
       }])
       .select()
       .single();
@@ -469,6 +470,7 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
     { field: 'email',     label: '📧 Email',     type: 'email' },
     { field: 'indirizzo', label: '📍 Indirizzo', type: 'text' },
     { field: 'note',      label: '📝 Note',      type: 'textarea' },
+    { field: 'prezzo_riservato', label: '💰 Prezzo riservato', type: 'number' },
   ];
 
   return (
@@ -515,6 +517,11 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
                   {type === 'textarea' ? (
                     <textarea autoFocus rows={3} value={editVal} onChange={e => setEditVal(e.target.value)}
                       style={{ ...inputStyle, resize: 'vertical' }} />
+                  ) : type === 'number' ? (
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
+                      <input type="number" min="0" step="0.50" autoFocus value={editVal} onChange={e => setEditVal(e.target.value)} style={{ ...inputStyle, paddingLeft: 26 }} />
+                    </div>
                   ) : (
                     <input type={type} autoFocus value={editVal} onChange={e => setEditVal(e.target.value)} style={inputStyle} />
                   )}
@@ -529,8 +536,10 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
                   borderBottom: '1px solid rgba(255,255,255,0.4)' }}>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 100 }}>{label}</div>
-                  <div style={{ flex: 1, fontSize: 14, color: cliente[field] ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                    {cliente[field] || '—'}
+                  <div style={{ flex: 1, fontSize: 14, color: cliente[field] ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: field === 'prezzo_riservato' && cliente[field] ? 700 : 400 }}>
+                    {field === 'prezzo_riservato'
+                      ? (cliente[field] ? `€ ${Number(cliente[field]).toFixed(2)}` : '— Prezzo standard')
+                      : (cliente[field] || '—')}
                   </div>
                   <button onClick={() => { setEditing(field); setEditVal(cliente[field] || ''); }} style={{
                     fontSize: 11, fontWeight: 600, background: 'rgba(59,130,246,0.1)', color: '#2563eb',
@@ -624,7 +633,8 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
   const filtered = clienti.filter(c =>
     `${c.cognome} ${c.nome}`.toLowerCase().includes(search.toLowerCase()) ||
     (c.telefono || '').includes(search) ||
-    (c.email || '').toLowerCase().includes(search.toLowerCase())
+    (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.animali_nomi || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -652,7 +662,7 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
       {/* Ricerca */}
       <div style={{ ...glassCard, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 16, opacity: 0.5 }}>🔍</span>
-        <input type="text" placeholder="Cerca per nome, telefono o email..."
+        <input type="text" placeholder="Cerca per nome, telefono, email o animale..."
           value={search} onChange={e => setSearch(e.target.value)}
           style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit' }} />
         {search && (
@@ -722,6 +732,11 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
                     {c.animali_count} 🐾
                   </div>
                 )}
+                {c.prezzo_riservato && (
+                  <div style={{ fontSize: 11, fontWeight: 700, background: 'rgba(37,99,235,0.1)', color: '#2563eb', padding: '3px 8px', borderRadius: 20 }}>
+                    € {Number(c.prezzo_riservato).toFixed(0)}
+                  </div>
+                )}
                 <div style={{ fontSize: 18, color: 'var(--text-muted)' }}>›</div>
               </div>
             </motion.button>
@@ -750,16 +765,17 @@ export default function ClientiView() {
     const [cl, rz, op] = await Promise.all([
       supabase
         .from('clienti')
-        .select('*, animali(count)')
+        .select('*, animali(id, nome)')
         .order('cognome'),
       supabase.from('razze').select('id,nome,specie').order('nome'),
       supabase.from('operatori').select('id,nome,cognome').eq('attivo', true).order('nome'),
     ]);
 
-    // Normalize animali count
+    // Normalize animali — count e nomi per la ricerca
     const clientiWithCount = (cl.data || []).map(c => ({
       ...c,
-      animali_count: c.animali?.[0]?.count || 0,
+      animali_count: c.animali?.length || 0,
+      animali_nomi: (c.animali || []).map(a => a.nome).join(' '),
     }));
 
     setClienti(clientiWithCount);

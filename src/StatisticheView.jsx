@@ -157,7 +157,7 @@ function BarraOrizzontale({ label, value, max, color, extra }) {
 // ─────────────────────────────────────────────────────────────
 // EXPORT FUNCTIONS
 // ─────────────────────────────────────────────────────────────
-function exportPDF(dati, meseLabel) {
+function exportPDF(dati, meseLabel, appuntamenti, clienti, animali, sel) {
   const doc = new jsPDF();
   const y = { cur: 20 };
   const next = (n = 10) => { y.cur += n; return y.cur; };
@@ -194,31 +194,103 @@ function exportPDF(dati, meseLabel) {
   });
   y.cur = doc.lastAutoTable.finalY + 14;
 
-  // Appuntamenti per operatore
-  doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-  doc.text('Appuntamenti per Operatore', 14, y.cur); next(6);
-  autoTable(doc, {
-    startY: y.cur,
-    head: [['Operatore', 'Appuntamenti', 'Completati']],
-    body: dati.perOperatore.map(o => [o.nome, o.totale, o.completati]),
-    theme: 'striped',
-    headStyles: { fillColor: [5, 150, 105] },
-    margin: { left: 14 },
-  });
-  y.cur = doc.lastAutoTable.finalY + 14;
+  // Appuntamenti per operatore (sempre nel riepilogo)
+  if (dati.perOperatore.length > 0) {
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+    doc.text('Appuntamenti per Operatore', 14, y.cur); next(6);
+    autoTable(doc, {
+      startY: y.cur,
+      head: [['Operatore', 'Appuntamenti', 'Completati']],
+      body: dati.perOperatore.map(o => [o.nome, o.totale, o.completati]),
+      theme: 'striped',
+      headStyles: { fillColor: [5, 150, 105] },
+      margin: { left: 14 },
+    });
+    y.cur = doc.lastAutoTable.finalY + 14;
+  }
 
   // Servizi
-  if (y.cur > 220) { doc.addPage(); y.cur = 20; }
-  doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-  doc.text('Servizi Richiesti', 14, y.cur); next(6);
-  autoTable(doc, {
-    startY: y.cur,
-    head: [['Servizio', 'Richieste', 'Ricavo']],
-    body: dati.perServizio.map(s => [s.nome, s.count, `€${s.ricavo.toFixed(2)}`]),
-    theme: 'striped',
-    headStyles: { fillColor: [217, 119, 6] },
-    margin: { left: 14 },
-  });
+  if (dati.perServizio.length > 0) {
+    if (y.cur > 220) { doc.addPage(); y.cur = 20; }
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+    doc.text('Servizi Richiesti', 14, y.cur); next(6);
+    autoTable(doc, {
+      startY: y.cur,
+      head: [['Servizio', 'Richieste', 'Ricavo']],
+      body: dati.perServizio.map(s => [s.nome, s.count, `€${s.ricavo.toFixed(2)}`]),
+      theme: 'striped',
+      headStyles: { fillColor: [217, 119, 6] },
+      margin: { left: 14 },
+    });
+    y.cur = doc.lastAutoTable.finalY + 14;
+  }
+
+  // Appuntamenti dettaglio
+  if (sel?.appuntamenti && appuntamenti?.length > 0) {
+    doc.addPage(); y.cur = 20;
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+    doc.text('Dettaglio Appuntamenti', 14, y.cur); next(6);
+    autoTable(doc, {
+      startY: y.cur,
+      head: [['Data', 'Ora', 'Cliente', 'Animale', 'Servizio', 'Operatore', 'Stato']],
+      body: appuntamenti.map(a => [
+        new Date(a.inizio).toLocaleDateString('it-IT'),
+        new Date(a.inizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        `${a.clienti?.cognome || ''} ${a.clienti?.nome || ''}`.trim(),
+        a.animali?.nome || '',
+        a.servizi?.nome || '',
+        a.operatori?.nome || '',
+        a.stato,
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [37, 99, 235] },
+      margin: { left: 14 },
+      styles: { fontSize: 9 },
+    });
+    y.cur = doc.lastAutoTable.finalY + 14;
+  }
+
+  // Clienti
+  if (sel?.clienti && clienti?.length > 0) {
+    if (y.cur > 220) { doc.addPage(); y.cur = 20; }
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+    doc.text('Anagrafica Clienti', 14, y.cur); next(6);
+    autoTable(doc, {
+      startY: y.cur,
+      head: [['Cognome', 'Nome', 'Telefono', 'Email', 'Registrato']],
+      body: clienti.map(c => [
+        c.cognome || '', c.nome || '',
+        c.telefono || '', c.email || '',
+        c.created_at ? new Date(c.created_at).toLocaleDateString('it-IT') : '',
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [124, 58, 237] },
+      margin: { left: 14 },
+      styles: { fontSize: 9 },
+    });
+    y.cur = doc.lastAutoTable.finalY + 14;
+  }
+
+  // Animali
+  if (sel?.animali && animali?.length > 0) {
+    if (y.cur > 220) { doc.addPage(); y.cur = 20; }
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+    doc.text('Anagrafica Animali', 14, y.cur); next(6);
+    autoTable(doc, {
+      startY: y.cur,
+      head: [['Nome', 'Specie', 'Razza', 'Proprietario', 'Registrato']],
+      body: animali.map(a => [
+        a.nome || '', a.specie || '',
+        a.razze?.nome || '',
+        a.clienti ? `${a.clienti.cognome || ''} ${a.clienti.nome || ''}`.trim() : '',
+        a.created_at ? new Date(a.created_at).toLocaleDateString('it-IT') : '',
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [8, 145, 178] },
+      margin: { left: 14 },
+      styles: { fontSize: 9 },
+    });
+  }
 
   // Footer
   const pageCount = doc.internal.getNumberOfPages();
@@ -232,7 +304,7 @@ function exportPDF(dati, meseLabel) {
   doc.save(`PetCare_Report_${meseLabel.replace(' ', '_')}.pdf`);
 }
 
-function exportExcel(dati, appuntamenti, clienti, animali, meseLabel) {
+function exportExcel(dati, appuntamenti, clienti, animali, meseLabel, sel) {
   const wb = XLSX.utils.book_new();
 
   // Foglio 1: Riepilogo
@@ -247,37 +319,58 @@ function exportExcel(dati, appuntamenti, clienti, animali, meseLabel) {
     ['Ricavo stimato', dati.ricavoMese],
     ['Clienti nuovi', dati.nuoviClienti],
   ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(riepilogo), 'Riepilogo');
+  if (sel?.riepilogo) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(riepilogo), 'Riepilogo');
+  }
 
-  // Foglio 2: Appuntamenti
-  const apRows = [
-    ['Data', 'Ora', 'Cliente', 'Animale', 'Servizio', 'Operatore', 'Stato', 'Prezzo'],
-    ...appuntamenti.map(a => [
-      new Date(a.inizio).toLocaleDateString('it-IT'),
-      new Date(a.inizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-      `${a.clienti?.cognome || ''} ${a.clienti?.nome || ''}`,
-      a.animali?.nome || '',
-      a.servizi?.nome || '',
-      a.operatori?.nome || '',
-      a.stato,
-      a.servizi?.prezzo || '',
-    ])
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(apRows), 'Appuntamenti');
+  if (sel?.appuntamenti && appuntamenti?.length > 0) {
+    const apRows = [
+      ['Data', 'Ora', 'Cliente', 'Animale', 'Specie', 'Servizio', 'Operatore', 'Stato', 'Prezzo'],
+      ...appuntamenti.map(a => [
+        new Date(a.inizio).toLocaleDateString('it-IT'),
+        new Date(a.inizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        `${a.clienti?.cognome || ''} ${a.clienti?.nome || ''}`.trim(),
+        a.animali?.nome || '',
+        a.animali?.specie || '',
+        a.servizi?.nome || '',
+        a.operatori?.nome || '',
+        a.stato,
+        a.prezzo_confermato_flag ? `€${Number(a.prezzo_confermato).toFixed(2)}` : (a.prezzo_proposto ? `€${Number(a.prezzo_proposto).toFixed(2)}` : (a.servizi?.prezzo ? `€${Number(a.servizi.prezzo).toFixed(2)}` : '')),
+      ])
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(apRows), 'Appuntamenti');
+  }
 
-  // Foglio 3: Clienti
-  const clRows = [
-    ['Cognome', 'Nome', 'Data registrazione'],
-    ...clienti.map(c => [c.cognome, c.nome, new Date(c.created_at).toLocaleDateString('it-IT')])
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(clRows), 'Clienti');
+  if (sel?.clienti && clienti?.length > 0) {
+    const clRows = [
+      ['Cognome', 'Nome', 'Telefono', 'Email', 'Indirizzo', 'Note', 'Registrato'],
+      ...clienti.map(c => [
+        c.cognome || '', c.nome || '',
+        c.telefono || '', c.email || '',
+        c.indirizzo || '', c.note || '',
+        c.created_at ? new Date(c.created_at).toLocaleDateString('it-IT') : '',
+      ])
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(clRows), 'Clienti');
+  }
 
-  // Foglio 4: Animali
-  const anRows = [
-    ['Nome', 'Specie', 'Razza', 'Data registrazione'],
-    ...animali.map(a => [a.nome, a.specie, a.razze?.nome || '', new Date(a.created_at).toLocaleDateString('it-IT')])
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(anRows), 'Animali');
+  if (sel?.animali && animali?.length > 0) {
+    const anRows = [
+      ['Nome', 'Specie', 'Razza', 'Proprietario', 'Data nascita', 'Colore', 'Operatore pref.', 'Zone critiche', 'Note', 'Registrato'],
+      ...animali.map(a => [
+        a.nome || '', a.specie || '',
+        a.razze?.nome || '',
+        a.clienti ? `${a.clienti.cognome || ''} ${a.clienti.nome || ''}`.trim() : '',
+        a.data_nascita ? new Date(a.data_nascita).toLocaleDateString('it-IT') : '',
+        a.colore || '',
+        a.operatori?.nome || '',
+        a.zone_critiche || '',
+        a.note || '',
+        a.created_at ? new Date(a.created_at).toLocaleDateString('it-IT') : '',
+      ])
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(anRows), 'Animali');
+  }
 
   XLSX.writeFile(wb, `PetCare_${meseLabel.replace(' ', '_')}.xlsx`);
 }
@@ -286,8 +379,18 @@ function exportExcel(dati, appuntamenti, clienti, animali, meseLabel) {
 // COMPONENTE PRINCIPALE
 // ─────────────────────────────────────────────────────────────
 export default function StatisticheView() {
-  const [loading,      setLoading]      = useState(true);
-  const [exporting,    setExporting]    = useState('');
+  const [loading,         setLoading]         = useState(true);
+  const [exporting,       setExporting]       = useState('');
+  const [showExportPanel, setShowExportPanel] = useState(false);
+  const [exportSel, setExportSel] = useState({
+    riepilogo:     true,
+    appuntamenti:  true,
+    clienti:       true,
+    animali:       true,
+  });
+  const [exportPeriodo, setExportPeriodo] = useState('mese'); // 'mese' | 'custom'
+  const [exportDal, setExportDal]   = useState('');
+  const [exportAl,  setExportAl]    = useState('');
   const [meseSel,      setMeseSel]      = useState(new Date().getMonth());
   const [annoSel,      setAnnoSel]      = useState(new Date().getFullYear());
   const [appuntamenti, setAppuntamenti] = useState([]);
@@ -306,10 +409,11 @@ export default function StatisticheView() {
         clienti(id, nome, cognome),
         animali(id, nome, specie),
         operatori(id, nome, cognome, colore),
-        servizi(id, nome, prezzo, durata_minuti)
+        servizi(id, nome, prezzo, durata_minuti),
+        prezzo_proposto, prezzo_confermato, prezzo_confermato_flag
       `).order('inizio'),
-      supabase.from('clienti').select('id, nome, cognome, created_at'),
-      supabase.from('animali').select('id, nome, specie, created_at, razze(nome)'),
+      supabase.from('clienti').select('id, nome, cognome, telefono, email, indirizzo, note, created_at'),
+      supabase.from('animali').select('id, nome, specie, razza_id, colore, data_nascita, zone_critiche, note, operatore_preferito_id, created_at, razze(nome), clienti(nome, cognome)'), 
       supabase.from('operatori').select('id, nome, cognome, colore').eq('attivo', true),
       supabase.from('servizi').select('id, nome, prezzo, durata_minuti'),
     ]);
@@ -338,9 +442,20 @@ export default function StatisticheView() {
   const confermati  = apMese.filter(a => a.stato === 'confermato').length;
   const tassoCompletamento = apMese.length > 0 ? Math.round((completati / apMese.length) * 100) : 0;
 
+  // Usa prezzo_confermato se disponibile, altrimenti prezzo_proposto, altrimenti prezzo del servizio
+  const getPrezzoAp = (a) => {
+    if (a.prezzo_confermato_flag && a.prezzo_confermato) return Number(a.prezzo_confermato);
+    if (a.prezzo_proposto) return Number(a.prezzo_proposto);
+    return Number(a.servizi?.prezzo || 0);
+  };
+
   const ricavoMese = apMese
-    .filter(a => a.stato === 'completato' && a.servizi?.prezzo)
-    .reduce((acc, a) => acc + Number(a.servizi.prezzo), 0);
+    .filter(a => a.stato === 'completato')
+    .reduce((acc, a) => acc + getPrezzoAp(a), 0);
+
+  const ricavoConfermato = apMese
+    .filter(a => a.prezzo_confermato_flag)
+    .reduce((acc, a) => acc + Number(a.prezzo_confermato), 0);
 
   const nuoviClienti = clienti.filter(c => {
     const d = new Date(c.created_at);
@@ -356,8 +471,8 @@ export default function StatisticheView() {
       const d = new Date(a.inizio);
       return d.getMonth() === m && d.getFullYear() === y;
     });
-    const ricavo = ap.filter(a => a.stato === 'completato' && a.servizi?.prezzo)
-      .reduce((acc, a) => acc + Number(a.servizi.prezzo), 0);
+    const ricavo = ap.filter(a => a.stato === 'completato')
+      .reduce((acc, a) => acc + getPrezzoAp(a), 0);
     return {
       mese: MESI_SHORT[m],
       appuntamenti: ap.length,
@@ -383,7 +498,7 @@ export default function StatisticheView() {
   const perServizio = servizi.map(s => {
     const apSv = apMese.filter(a => a.servizi?.id === s.id);
     const ricavo = apSv.filter(a => a.stato === 'completato')
-      .reduce((acc) => acc + Number(s.prezzo || 0), 0);
+      .reduce((acc, a) => acc + getPrezzoAp(a), 0);
     return { nome: s.nome, count: apSv.length, ricavo };
   }).filter(s => s.count > 0).sort((a,b) => b.count - a.count);
 
@@ -417,17 +532,31 @@ export default function StatisticheView() {
     tassoCompletamento, ricavoMese, nuoviClienti, perOperatore, perServizio,
   };
 
+  // Filtra appuntamenti per periodo custom
+  const apFiltrati = exportPeriodo === 'mese' ? apMese : appuntamenti.filter(a => {
+    const d = new Date(a.inizio);
+    const dal = exportDal ? new Date(exportDal) : null;
+    const al  = exportAl  ? new Date(exportAl + 'T23:59:59') : null;
+    return (!dal || d >= dal) && (!al || d <= al);
+  });
+
+  const periodoLabel = exportPeriodo === 'mese'
+    ? meseLabel
+    : `${exportDal || '?'} - ${exportAl || '?'}`;
+
   const handlePDF = async () => {
     setExporting('pdf');
+    setShowExportPanel(false);
     await new Promise(r => setTimeout(r, 100));
-    exportPDF(datiExport, meseLabel);
+    exportPDF(datiExport, periodoLabel, apFiltrati, clienti, animali, exportSel);
     setExporting('');
   };
 
   const handleExcel = async () => {
     setExporting('excel');
+    setShowExportPanel(false);
     await new Promise(r => setTimeout(r, 100));
-    exportExcel(datiExport, appuntamenti, clienti, animali, meseLabel);
+    exportExcel(datiExport, apFiltrati, clienti, animali, periodoLabel, exportSel);
     setExporting('');
   };
 
@@ -472,16 +601,107 @@ export default function StatisticheView() {
           }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 16, padding: '0 4px' }}>›</button>
         </div>
 
-        {/* Export */}
-        <button onClick={handlePDF} disabled={!!exporting} style={{ ...glassCard, ...{ padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#dc2626', border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.08)' } }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-          {exporting === 'pdf' ? 'Esporto...' : 'PDF'}
-        </button>
-        <button onClick={handleExcel} disabled={!!exporting} style={{ ...glassCard, ...{ padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#059669', border: '1px solid rgba(5,150,105,0.2)', background: 'rgba(5,150,105,0.08)' } }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
-          {exporting === 'excel' ? 'Esporto...' : 'Excel'}
+        {/* Bottone Esporta */}
+        <button
+          onClick={() => setShowExportPanel(p => !p)}
+          disabled={!!exporting}
+          style={{ ...glassCard, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb', border: '1px solid rgba(37,99,235,0.2)', background: showExportPanel ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.06)' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          {exporting ? 'Esporto...' : 'Esporta'}
         </button>
       </motion.div>
+
+      {/* ── PANNELLO EXPORT ── */}
+      <AnimatePresence>
+        {showExportPanel && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            style={{ ...glass, padding: '20px 22px', marginBottom: 16 }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.6px', textTransform: 'uppercase', marginBottom: 16 }}>
+              Opzioni di esportazione
+            </div>
+
+            {/* Periodo */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Periodo</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {[['mese', `Mese corrente (${meseLabel})`], ['custom', 'Intervallo personalizzato']].map(([v, l]) => (
+                  <button key={v} onClick={() => setExportPeriodo(v)} style={{
+                    padding: '7px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: 12, fontWeight: 600, border: '1px solid var(--card-border)',
+                    background: exportPeriodo === v ? 'rgba(37,99,235,0.15)' : 'var(--card-bg-sm)',
+                    color: exportPeriodo === v ? '#2563eb' : 'var(--text-primary)',
+                  }}>{l}</button>
+                ))}
+              </div>
+              {exportPeriodo === 'custom' && (
+                <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Dal</div>
+                    <input type="date" value={exportDal} onChange={e => setExportDal(e.target.value)}
+                      style={{ background: 'var(--input-bg)', border: '1px solid var(--card-border)', borderRadius: 10, padding: '7px 10px', fontSize: 13, color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none' }} />
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', marginTop: 16 }}>—</div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Al</div>
+                    <input type="date" value={exportAl} onChange={e => setExportAl(e.target.value)}
+                      style={{ background: 'var(--input-bg)', border: '1px solid var(--card-border)', borderRadius: 10, padding: '7px 10px', fontSize: 13, color: 'var(--text-primary)', fontFamily: 'inherit', outline: 'none' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Selezione dati */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Dati da includere</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {[
+                  { k: 'riepilogo',    l: 'Riepilogo statistiche', c: '#2563eb' },
+                  { k: 'appuntamenti', l: 'Appuntamenti',           c: '#059669' },
+                  { k: 'clienti',      l: 'Clienti',                c: '#7c3aed' },
+                  { k: 'animali',      l: 'Animali',                c: '#0891b2' },
+                ].map(({ k, l, c }) => (
+                  <button key={k}
+                    onClick={() => setExportSel(p => ({ ...p, [k]: !p[k] }))}
+                    style={{
+                      padding: '7px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 12, fontWeight: 600,
+                      border: `1px solid ${exportSel[k] ? c + '40' : 'var(--card-border)'}`,
+                      background: exportSel[k] ? c + '18' : 'var(--card-bg-sm)',
+                      color: exportSel[k] ? c : 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <div style={{ width: 14, height: 14, borderRadius: 4, background: exportSel[k] ? c : 'var(--card-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {exportSel[k] && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+                    </div>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bottoni formato */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={handlePDF} disabled={!!exporting || !Object.values(exportSel).some(Boolean)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 13, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: '#dc2626', border: '1px solid rgba(220,38,38,0.3)', background: 'rgba(220,38,38,0.08)', opacity: !Object.values(exportSel).some(Boolean) ? 0.4 : 1 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                {exporting === 'pdf' ? 'Esporto...' : 'Scarica PDF'}
+              </button>
+              <button onClick={handleExcel} disabled={!!exporting || !Object.values(exportSel).some(Boolean)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 13, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: '#059669', border: '1px solid rgba(5,150,105,0.3)', background: 'rgba(5,150,105,0.08)', opacity: !Object.values(exportSel).some(Boolean) ? 0.4 : 1 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+                {exporting === 'excel' ? 'Esporto...' : 'Scarica Excel'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── KPI RINGS ── */}
       <motion.div
@@ -500,6 +720,14 @@ export default function StatisticheView() {
             <div style={{ fontSize: 28, fontWeight: 700, color: C.green }}>€{Math.round(ricavoMese)}</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: C.green, marginTop: 4 }}>Ricavo stimato</div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>dai completati</div>
+            {ricavoConfermato > 0 && (
+              <div style={{ marginTop: 8, padding: '4px 10px', borderRadius: 20,
+                background: 'rgba(5,150,105,0.15)', display: 'inline-block' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>
+                  € {Math.round(ricavoConfermato)} confermati
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

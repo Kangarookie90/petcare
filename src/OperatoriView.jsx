@@ -51,10 +51,18 @@ const secLabel = {
 };
 
 // ── Palette colori predefiniti ────────────────────────────────
+// Colori neon per operatori — vivaci e distinguibili nel calendario
 const COLORI_PRESET = [
-  '#2563eb','#059669','#d97706','#7c3aed',
-  '#db2777','#0891b2','#dc2626','#65a30d',
-  '#ea580c','#0d9488',
+  '#3b82f6', // blu elettrico
+  '#22c55e', // verde neon
+  '#f97316', // arancio neon
+  '#a855f7', // viola neon
+  '#ec4899', // rosa neon
+  '#06b6d4', // cyan neon
+  '#eab308', // giallo neon
+  '#ef4444', // rosso neon
+  '#14b8a6', // teal neon
+  '#8b5cf6', // indaco neon
 ];
 
 // ── Selezione colore ──────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
 import PetView from './PetView';
@@ -6,6 +6,7 @@ import ClientiView from './ClientiView';
 import CalendarioView from './CalendarioView';
 import StatisticheView from './StatisticheView';
 import OperatoriView from './OperatoriView';
+import OfflineIndicator from './OfflineIndicator';
 
 // ── Varianti animazione pagine ──────────────────────────────
 const pageVariants = {
@@ -91,102 +92,187 @@ const NAV_ITEMS = [
   },
 ];
 
-const OPERATORI_MOCK = [
-  { nome: "Luca",  colore: "#2563eb", appuntamenti: 5 },
-  { nome: "Marco", colore: "#059669", appuntamenti: 3 },
-  { nome: "Sara",  colore: "#d97706", appuntamenti: 7 },
-];
 
-const PROSSIMI_MOCK = [
-  { ora: "09:00", cliente: "Famiglia Rossi",   animale: "Rex",  servizio: "Toeletta",          operatore: "Luca",  colore: "#2563eb" },
-  { ora: "10:30", cliente: "Famiglia Bianchi", animale: "Luna", servizio: "Bagno e Asciugatura",operatore: "Sara",  colore: "#d97706" },
-  { ora: "11:00", cliente: "Famiglia Verdi",   animale: "Milo", servizio: "Taglio",             operatore: "Marco", colore: "#059669" },
-  { ora: "14:00", cliente: "Famiglia Ferrari", animale: "Kira", servizio: "Toeletta completa",  operatore: "Sara",  colore: "#d97706" },
-];
 
 function HomeView() {
+  const [dati, setDati] = useState({ operatori: [], appuntamenti: [], totaleOggi: 0, inAttesa: 0, totaleClienti: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const oggi = new Date();
+      const inizioGiorno = new Date(oggi.setHours(0,0,0,0)).toISOString();
+      const fineGiorno   = new Date(oggi.setHours(23,59,59,999)).toISOString();
+
+      const [opRes, apRes, clRes] = await Promise.all([
+        supabase.from("operatori").select("id,nome,cognome,colore").eq("attivo", true).order("nome"),
+        supabase.from("appuntamenti").select(`
+          id, inizio, fine, stato,
+          clienti(nome, cognome),
+          animali(nome, specie),
+          operatori(id, nome, colore),
+          servizi(nome)
+        `).gte("inizio", inizioGiorno).lte("inizio", fineGiorno).order("inizio"),
+        supabase.from("clienti").select("id", { count: "exact", head: true }),
+      ]);
+
+      const ops = opRes.data || [];
+      const aps = apRes.data || [];
+      const maxAp = Math.max(...ops.map(op => aps.filter(a => a.operatori?.id === op.id).length), 1);
+
+      setDati({
+        operatori: ops.map(op => ({
+          ...op,
+          appuntamentiOggi: aps.filter(a => a.operatori?.id === op.id).length,
+          maxAp,
+        })),
+        appuntamenti: aps,
+        totaleOggi: aps.length,
+        inAttesa: aps.filter(a => a.stato === "in attesa").length,
+        totaleClienti: clRes.count || 0,
+      });
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const ora = new Date().getHours();
+  const saluto = ora < 12 ? "Buongiorno" : ora < 18 ? "Buon pomeriggio" : "Buonasera";
   const oggi = new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  const specieEmoji = s => s === "gatto" ? "🐈" : "🐕";
+  const COLORI_STATI = { confermato: "#2563eb", "in attesa": "#d97706", completato: "#059669", cancellato: "#dc2626" };
 
   return (
-    <motion.div
-      style={{ padding: "0 0 2rem" }}
-      variants={listVariants}
-      initial="initial"
-      animate="animate"
-    >
+    <motion.div style={{ padding: "0 0 2rem", maxWidth: 720, margin: "0 auto" }}
+      variants={listVariants} initial="initial" animate="animate">
+
       {/* Header */}
       <motion.div variants={itemVariants} style={{ marginBottom: "1.5rem" }}>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 3px", textTransform: "capitalize", fontWeight: 500 }}>{oggi}</p>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.5px" }}>Buongiorno!</h1>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 4px", textTransform: "capitalize", fontWeight: 500 }}>{oggi}</p>
+        <h1 style={{ fontSize: 30, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.6px" }}>
+          {saluto}!
+        </h1>
       </motion.div>
 
-      {/* Stats */}
+      {/* KPI cards */}
       <motion.div variants={itemVariants} style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
         {[
-          { value: "15",  sub: "oggi" },
-          { value: "3",   sub: "in attesa", accent: "#d97706" },
-          { value: "128", sub: "clienti",   accent: "#059669" },
+          { value: loading ? "-" : dati.totaleOggi,    label: "appuntamenti",  sub: "oggi",       accent: "#2563eb", icon: "📅" },
+          { value: loading ? "-" : dati.inAttesa,      label: "in attesa",     sub: "da confermare", accent: "#d97706", icon: "⏳" },
+          { value: loading ? "-" : dati.totaleClienti, label: "clienti",       sub: "registrati", accent: "#059669", icon: "👤" },
         ].map((s) => (
-          <motion.div
-            key={s.sub}
-            whileHover={{ y: -2 }}
+          <motion.div key={s.label}
+            whileHover={{ y: -3 }}
             whileTap={{ scale: 0.97 }}
             transition={{ type: "spring", stiffness: 400, damping: 20 }}
-            style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: 18, padding: "14px 12px", textAlign: "center", boxShadow: "var(--card-shadow)", cursor: "default" }}
+            style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: 20, padding: "16px 12px", textAlign: "center", boxShadow: "var(--card-shadow)", cursor: "default", position: "relative", overflow: "hidden" }}
           >
-            <p style={{ fontSize: 26, fontWeight: 700, color: s.accent || "var(--text-primary)", margin: 0, lineHeight: 1 }}>{s.value}</p>
-            <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "3px 0 0", fontWeight: 500 }}>{s.sub}</p>
+            {/* Background accent circle */}
+            <div style={{ position: "absolute", top: -14, right: -14, width: 60, height: 60, borderRadius: "50%", background: s.accent + "18" }} />
+            <div style={{ fontSize: 20, marginBottom: 6 }}>{s.icon}</div>
+            <p style={{ fontSize: 28, fontWeight: 800, color: s.accent, margin: 0, lineHeight: 1, letterSpacing: "-1px" }}>{s.value}</p>
+            <p style={{ fontSize: 11, color: "var(--text-primary)", margin: "4px 0 0", fontWeight: 600 }}>{s.label}</p>
+            <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "1px 0 0" }}>{s.sub}</p>
           </motion.div>
         ))}
       </motion.div>
 
       {/* Operatori */}
-      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.5px", textTransform: "uppercase" }}>Operatori</motion.p>
-      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 20 }}>
-        {OPERATORI_MOCK.map((op) => (
-          <motion.div
-            key={op.nome}
-            variants={itemVariants}
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 13, boxShadow: "var(--card-shadow-sm)" }}
-          >
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: op.colore + "22", border: "2px solid " + op.colore + "55", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: op.colore, flexShrink: 0 }}>
-              {op.nome[0]}
-            </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{op.nome}</p>
-              <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>{op.appuntamenti} appuntamenti oggi</p>
-            </div>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: op.colore }} />
-          </motion.div>
-        ))}
+      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.6px", textTransform: "uppercase" }}>
+        Operatori oggi
+      </motion.p>
+      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+        {loading ? (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "16px 0" }}>Caricamento...</div>
+        ) : dati.operatori.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "16px 0" }}>Nessun operatore attivo</div>
+        ) : dati.operatori.map((op) => {
+          const pct = op.maxAp > 0 ? (op.appuntamentiOggi / op.maxAp) * 100 : 0;
+          const colore = op.colore || "#2563eb";
+          return (
+            <motion.div key={op.id} variants={itemVariants}
+              whileHover={{ y: -1 }}
+              style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", boxShadow: "var(--card-shadow-sm)" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                {/* Avatar */}
+                <div style={{ width: 38, height: 38, borderRadius: 12, background: colore, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: "#fff", flexShrink: 0, boxShadow: "0 3px 10px " + colore + "55" }}>
+                  {op.nome[0]}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{op.nome} {op.cognome}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>
+                    {op.appuntamentiOggi} appuntament{op.appuntamentiOggi === 1 ? "o" : "i"} oggi
+                  </p>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colore }}>
+                  {op.appuntamentiOggi}
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div style={{ height: 5, borderRadius: 99, background: colore + "20", overflow: "hidden" }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: pct + "%" }}
+                  transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+                  style={{ height: "100%", borderRadius: 99, background: colore, boxShadow: "0 0 6px " + colore + "80" }}
+                />
+              </div>
+            </motion.div>
+          );
+        })}
       </motion.div>
 
-      {/* Appuntamenti */}
-      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.5px", textTransform: "uppercase" }}>Prossimi appuntamenti</motion.p>
-      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-        {PROSSIMI_MOCK.map((a, i) => (
-          <motion.div
-            key={i}
-            variants={itemVariants}
-            whileHover={{ y: -1 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--card-shadow-sm)" }}
-          >
-            <div style={{ minWidth: 42, textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{a.ora}</p>
-            </div>
-            <div style={{ width: 3, height: 36, borderRadius: 99, background: a.colore, flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.animale} - {a.servizio}</p>
-              <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>{a.cliente} - {a.operatore}</p>
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 600, background: a.colore + "22", color: a.colore, padding: "3px 9px", borderRadius: 20 }}>conf.</div>
+      {/* Appuntamenti di oggi */}
+      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.6px", textTransform: "uppercase" }}>
+        Appuntamenti di oggi
+      </motion.p>
+      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {loading ? (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "16px 0" }}>Caricamento...</div>
+        ) : dati.appuntamenti.length === 0 ? (
+          <motion.div variants={itemVariants} style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "24px", textAlign: "center", boxShadow: "var(--card-shadow-sm)" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🌿</div>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Nessun appuntamento oggi</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-muted)" }}>Giornata libera!</p>
           </motion.div>
-        ))}
+        ) : dati.appuntamenti.map((a, i) => {
+          const ora = new Date(a.inizio).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+          const oraFine = new Date(a.fine).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+          const colore = a.operatori?.colore || "#2563eb";
+          const statoColore = COLORI_STATI[a.stato] || "#2563eb";
+          return (
+            <motion.div key={a.id} variants={itemVariants}
+              whileHover={{ y: -1 }}
+              style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--card-shadow-sm)" }}
+            >
+              {/* Ora */}
+              <div style={{ minWidth: 44, textAlign: "center", flexShrink: 0 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1 }}>{ora}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--text-muted)", lineHeight: 1 }}>{oraFine}</p>
+              </div>
+              {/* Barra colore operatore */}
+              <div style={{ width: 3, height: 40, borderRadius: 99, background: colore, flexShrink: 0 }} />
+              {/* Avatar animale */}
+              <div style={{ width: 36, height: 36, borderRadius: 12, background: colore + "18", border: "1px solid " + colore + "30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                {a.animali ? specieEmoji(a.animali.specie) : "🐾"}
+              </div>
+              {/* Info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {a.animali?.nome || "Animale"} — {a.servizi?.nome || "Servizio"}
+                </p>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {a.clienti ? a.clienti.cognome + " " + a.clienti.nome : ""}{a.operatori ? " · " + a.operatori.nome : ""}
+                </p>
+              </div>
+              {/* Badge stato */}
+              <div style={{ fontSize: 10, fontWeight: 700, background: statoColore + "18", color: statoColore, padding: "3px 9px", borderRadius: 20, flexShrink: 0, whiteSpace: "nowrap" }}>
+                {a.stato}
+              </div>
+            </motion.div>
+          );
+        })}
       </motion.div>
     </motion.div>
   );
@@ -537,6 +623,7 @@ export default function App() {
           )}
         </AnimatePresence>
       </div>
+     <OfflineIndicator />
     </>
   );
 }
