@@ -257,6 +257,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   const [animali,  setAnimali]  = useState([]);
   const [servizi,  setServizi]  = useState([]);
   const [razze,    setRazze]    = useState([]);
+  const [serviziCaricati, setServiziCaricati] = useState(false);
 
   const [cercaCliente, setCercaCliente] = useState('');
   const [showNuovoCliente, setShowNuovoCliente] = useState(false);
@@ -297,14 +298,29 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   // Fetch dati iniziali
   useEffect(() => {
     const load = async () => {
-      const [cl, sv, rz] = await Promise.all([
+      const promises = [
         supabase.from('clienti').select('id,nome,cognome,telefono,prezzo_riservato').order('cognome'),
         supabase.from('servizi').select('id,nome,durata_minuti,prezzo').order('nome'),
         supabase.from('razze').select('id,nome,specie').order('nome'),
-      ]);
+      ];
+      // Se siamo in modifica, carica anche i servizi associati
+      if (appuntamento?.id) {
+        promises.push(
+          supabase.from('appuntamenti_servizi')
+            .select('servizio_id, prezzo_applicato')
+            .eq('appuntamento_id', appuntamento.id)
+        );
+      }
+      const [cl, sv, rz, apSv] = await Promise.all(promises);
       setClienti(cl.data || []);
       setServizi(sv.data || []);
       setRazze(rz.data || []);
+      // Imposta i servizi già associati all'appuntamento
+      if (apSv?.data?.length > 0) {
+        const ids = apSv.data.map(r => r.servizio_id);
+        set('servizi_ids', ids);
+      }
+      setServiziCaricati(true);
     };
     load();
   }, []);
@@ -355,38 +371,71 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     if (!f.operatore_id) { setError('Seleziona un operatore'); return; }
     setSaving(true); setError('');
 
-    const inizio = new Date(`${f.data}T${f.ora_inizio}`);
-    const fine   = new Date(inizio.getTime() + f.durata_minuti * 60000);
+    try {
+      const inizio = new Date(`${f.data}T${f.ora_inizio}`);
+      const fine   = new Date(inizio.getTime() + f.durata_minuti * 60000);
 
-    const payload = {
-      cliente_id:    f.blocco_orario ? null : f.cliente_id,
-      animale_id:    f.blocco_orario ? null : f.animale_id,
-      operatore_id:  f.operatore_id,
-      servizio_id:   f.servizi_ids[0] || null,  // primo servizio come principale
-      inizio:        inizio.toISOString(),
-      fine:          fine.toISOString(),
-      note:          f.note.trim() || null,
-      stato:         f.stato,
-      prezzo_proposto:   f.prezzo_proposto !== '' ? Number(f.prezzo_proposto) : null,
-      prezzo_confermato: f.prezzo_confermato !== '' ? Number(f.prezzo_confermato) : null,
-      prezzo_confermato_flag: f.prezzo_confermato_flag,
-    };
+      const payload = {
+        cliente_id:    f.blocco_orario ? null : f.cliente_id,
+        animale_id:    f.blocco_orario ? null : f.animale_id,
+        operatore_id:  f.operatore_id,
+        servizio_id:   f.servizi_ids[0] || null, // primo per compatibilità
+        inizio:        inizio.toISOString(),
+        fine:          fine.toISOString(),
+        note:          f.note.trim() || null,
+        stato:         f.stato,
+        prezzo_proposto:        f.prezzo_proposto !== '' ? Number(f.prezzo_proposto) : null,
+        prezzo_confermato:      f.prezzo_confermato !== '' ? Number(f.prezzo_confermato) : null,
+        prezzo_confermato_flag: f.prezzo_confermato_flag,
+      };
 
-    let result;
-    if (isEdit) {
-      result = await supabase.from('appuntamenti').update(payload).eq('id', appuntamento.id).select(`
-        *, clienti(id,nome,cognome), animali(id,nome,specie), operatori(id,nome,cognome,colore)
-      `).single();
-    } else {
-      result = await supabase.from('appuntamenti').insert([payload]).select(`
-        *, clienti(id,nome,cognome), animali(id,nome,specie), operatori(id,nome,cognome,colore)
-      `).single();
+      const SELECT = `
+        id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
+        clienti(id,nome,cognome), 
+        animali(id,nome,specie), 
+        operatori(id,nome,cognome,colore)
+      `;
+
+      let result;
+      if (isEdit) {
+        result = await supabase.from('appuntamenti').update(payload).eq('id', appuntamento.id).select(SELECT).single();
+      } else {
+        result = await supabase.from('appuntamenti').insert([payload]).select(SELECT).single();
+      }
+
+      if (result.error) {
+        setError(result.error.message);
+        setSaving(false);
+        return;
+      }
+
+      const apId = result.data.id;
+
+      // Salva servizi su appuntamenti_servizi (cancella e reinserisci)
+      await supabase.from('appuntamenti_servizi').delete().eq('appuntamento_id', apId);
+      if (f.servizi_ids.length > 0) {
+        const righeServizi = f.servizi_ids.map(sid => {
+          const sv = servizi.find(x => x.id === sid);
+          return {
+            appuntamento_id:  apId,
+            servizio_id:      sid,
+            prezzo_applicato: sv?.prezzo || null,
+          };
+        });
+        const { error: svErr } = await supabase.from('appuntamenti_servizi').insert(righeServizi);
+        if (svErr) console.error('[CalendarioView] errore salvataggio servizi:', svErr);
+      }
+
+      // Aggiungi servizi al risultato per aggiornare il calendario
+      const serviziAssociati = f.servizi_ids.map(sid => servizi.find(x => x.id === sid)).filter(Boolean);
+      onSaved({ ...result.data, _serviziMultipli: serviziAssociati });
+      onClose();
+    } catch (err) {
+      console.error('[CalendarioView] save error:', err);
+      setError('Errore durante il salvataggio: ' + (err.message || 'riprova'));
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
-    if (result.error) { setError(result.error.message); return; }
-    onSaved(result.data);
-    onClose();
   };
 
   const deleteAppt = async () => {
@@ -411,10 +460,10 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     }
   }, [f.cliente_id, clienti]);
 
-  // Quando cambiano i servizi, calcola prezzo — solo se non in edit con prezzo già settato
+  // Quando cambiano i servizi, calcola prezzo totale dalla somma
   useEffect(() => {
     if (f.servizi_ids.length === 0) return;
-    if (isEdit && f.prezzo_proposto !== '') return; // non sovrascrivere in edit
+    if (isEdit && f.prezzo_proposto !== '' && !serviziCaricati) return;
     const cliente = clienti.find(x => x.id === f.cliente_id);
     if (cliente?.prezzo_riservato) {
       set('prezzo_proposto', String(cliente.prezzo_riservato));
@@ -864,7 +913,7 @@ export default function CalendarioView() {
   const [showModal,    setShowModal]    = useState(false);
   const [selectedAppt, setSelectedAppt] = useState(null);
   const [clickedDate,  setClickedDate]  = useState(null);
-  const [view,         setView]         = useState('timeGridDay');
+  const [view,         setView]         = useState('timeGridWeek');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -877,7 +926,7 @@ export default function CalendarioView() {
         clienti(id,nome,cognome),
         animali(id,nome,specie),
         operatori(id,nome,cognome,colore),
-        servizi(id,nome)
+        appuntamenti_servizi(servizio_id, prezzo_applicato, servizi(id,nome,prezzo,durata_minuti))
       `).neq('stato', 'cancellato'),
     ]);
     const ops = op.data || [];
@@ -891,22 +940,28 @@ export default function CalendarioView() {
     const idx = ops.findIndex(o => o.id === (op?.id || a.operatori?.id));
     const coloreBase = op?.colore || COLORI_OP[idx % COLORI_OP.length] || '#3b82f6';
     const prezzoOk = a.prezzo_confermato_flag;
-    const animaleNome = a.animali?.nome || 'Animale';
-    const servizioNome = a.servizi?.nome || '';
-    const operatoreNome = op?.nome || '';
-    // Titolo: "Rex · Toeletta · Enrico" oppure "Rex · Enrico"
-    const parti = [animaleNome, servizioNome, operatoreNome].filter(Boolean);
-    const title = parti.join(' · ') + (prezzoOk ? ' ✦' : '');
+    const colore = prezzoOk ? '#6b7280' : coloreBase;
+    // Servizi multipli da appuntamenti_servizi
+    const serviziMultipli = (a._serviziMultipli || a.appuntamenti_servizi || [])
+      .map(r => r.servizi || r)
+      .filter(Boolean);
+    const serviziNomi = serviziMultipli.map(s => s.nome).filter(Boolean);
     return {
       id:              a.id,
-      title,
+      title:           a.animali?.nome || 'Appuntamento',
       start:           a.inizio,
       end:             a.fine,
-      backgroundColor: coloreBase + 'cc',
-      borderColor:     coloreBase,
+      backgroundColor: colore + 'dd',
+      borderColor:     colore,
       textColor:       '#fff',
-      classNames:      prezzoOk ? ['ap-confermato'] : [],
-      extendedProps:   { appuntamento: a, coloreBase, prezzoOk },
+      extendedProps:   {
+        appuntamento: a,
+        coloreBase,
+        prezzoOk,
+        animaleNome:   a.animali?.nome || '',
+        servizioNome:  serviziNomi,
+        operatoreNome: op?.nome || '',
+      },
     };
   });
 
@@ -929,8 +984,26 @@ export default function CalendarioView() {
     }).eq('id', event.id);
   };
 
-  const handleSaved = () => { fetchAll(); };
-  const handleDeleted = () => { fetchAll(); };
+  const handleSaved = (apData) => {
+    if (!apData) { fetchAll(); return; }
+    // Aggiorna solo l'evento modificato/aggiunto senza rimontare il calendario
+    setOperatori(prev => {
+      const ops = prev;
+      setEvents(prevEvents => {
+        const nuovoEvent = apToEvents([apData], ops)[0];
+        if (!nuovoEvent) return prevEvents;
+        const exists = prevEvents.find(e => e.id === nuovoEvent.id);
+        if (exists) {
+          return prevEvents.map(e => e.id === nuovoEvent.id ? nuovoEvent : e);
+        }
+        return [...prevEvents, nuovoEvent];
+      });
+      return ops;
+    });
+  };
+  const handleDeleted = (id) => {
+    setEvents(prev => prev.filter(e => e.id !== id));
+  };
 
   const changeView = (v) => {
     setView(v);
@@ -1037,18 +1110,15 @@ export default function CalendarioView() {
           .fc .fc-timegrid-slot { min-height: 0; }
           .fc .fc-event {
             border-radius: 8px !important;
-            font-size: 11px !important;
-            font-weight: 600 !important;
-            padding: 3px 6px !important;
             cursor: pointer !important;
+            overflow: hidden !important;
+            border-width: 2px !important;
           }
-          .fc .fc-event .fc-event-title {
-            white-space: pre-wrap !important;
-            line-height: 1.35 !important;
-            font-size: 11px !important;
-          }
-          .fc .fc-event .fc-event-title-container { padding: 2px 0 !important; }
-          .fc .fc-event:hover { opacity: 0.88; transform: translateY(-1px); transition: all 0.12s ease; }
+          .fc .fc-event:hover { filter: brightness(1.08) !important; transform: translateY(-1px) !important; transition: all 0.12s ease !important; }
+          .fc .fc-event-main { padding: 0 !important; height: 100% !important; overflow: hidden !important; }
+          /* Nasconde titolo nativo — usiamo eventContent */
+          .fc .fc-event-title-container { display: none !important; }
+          .fc .fc-event-time { display: none !important; }
           .fc .fc-col-header-cell { font-size: 13px; font-weight: 600; color: var(--text-primary); padding: 8px 0; }
           .fc .fc-timegrid-axis { color: var(--text-muted); font-size: 11px; }
           .fc .fc-daygrid-day-number { color: var(--text-primary); font-size: 13px; }
@@ -1073,7 +1143,7 @@ export default function CalendarioView() {
             selectable={true}
             selectMirror={true}
             dayMaxEvents={3}
-            slotMinTime="08:00:00"
+            slotMinTime="09:00:00"
             slotMaxTime="20:00:00"
             slotDuration="00:30:00"
             slotLabelInterval="01:00"
@@ -1089,6 +1159,63 @@ export default function CalendarioView() {
             eventDrop={handleEventDrop}
             height="calc(100vh - 200px)"
             expandRows={true}
+            eventContent={({ event, timeText }) => {
+              const { animaleNome, servizioNome, operatoreNome, prezzoOk } = event.extendedProps;
+              const servizi = Array.isArray(servizioNome) ? servizioNome : (servizioNome ? [servizioNome] : []);
+              return (
+                <div style={{
+                  padding: '3px 6px',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'flex-start',
+                  overflow: 'hidden',
+                  gap: 1,
+                }}>
+                  {/* Riga 1: check + animale (grassetto) + operatore */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap', overflow: 'hidden' }}>
+                    {prezzoOk && (
+                      <div style={{
+                        width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
+                        background: 'linear-gradient(135deg,#a3e635,#22c55e)',
+                        border: '1.5px solid rgba(255,255,255,0.9)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 1px 4px rgba(34,197,94,0.6)',
+                      }}>
+                        <svg width="7" height="7" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 5l2.5 2.5 3.5-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                    )}
+                    <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                      {animaleNome}
+                    </span>
+                    {operatoreNome && (
+                      <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.75, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {operatoreNome}
+                      </span>
+                    )}
+                  </div>
+                  {/* Riga 2: orario */}
+                  <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.80, whiteSpace: 'nowrap', overflow: 'hidden', lineHeight: 1.2 }}>
+                    {timeText}
+                  </div>
+                  {/* Righe servizi: primo visibile + "... +N altri" */}
+                  {servizi.length > 0 && (
+                    <div style={{ fontSize: 10, opacity: 0.78, lineHeight: 1.3 }}>
+                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {servizi[0]}
+                      </div>
+                      {servizi.length > 1 && (
+                        <div style={{ opacity: 0.65, fontStyle: 'italic' }}>
+                          +{servizi.length - 1} {servizi.length - 1 === 1 ? 'altro' : 'altri'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }}
           />
         )}
       </motion.div>

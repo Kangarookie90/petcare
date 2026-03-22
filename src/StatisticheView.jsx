@@ -238,7 +238,7 @@ function exportPDF(dati, meseLabel, appuntamenti, clienti, animali, sel) {
         new Date(a.inizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         `${a.clienti?.cognome || ''} ${a.clienti?.nome || ''}`.trim(),
         a.animali?.nome || '',
-        a.servizi?.nome || '',
+        (a.appuntamenti_servizi || []).map(r => r.servizi?.nome).filter(Boolean).join(', ') || a.servizi?.nome || '',
         a.operatori?.nome || '',
         a.stato,
       ]),
@@ -332,7 +332,7 @@ function exportExcel(dati, appuntamenti, clienti, animali, meseLabel, sel) {
         `${a.clienti?.cognome || ''} ${a.clienti?.nome || ''}`.trim(),
         a.animali?.nome || '',
         a.animali?.specie || '',
-        a.servizi?.nome || '',
+(a.appuntamenti_servizi || []).map(r => r.servizi?.nome).filter(Boolean).join(', ') || '',
         a.operatori?.nome || '',
         a.stato,
         a.prezzo_confermato_flag ? `€${Number(a.prezzo_confermato).toFixed(2)}` : (a.prezzo_proposto ? `€${Number(a.prezzo_proposto).toFixed(2)}` : (a.servizi?.prezzo ? `€${Number(a.servizi.prezzo).toFixed(2)}` : '')),
@@ -409,8 +409,8 @@ export default function StatisticheView() {
         clienti(id, nome, cognome),
         animali(id, nome, specie),
         operatori(id, nome, cognome, colore),
-        servizi(id, nome, prezzo, durata_minuti),
-        prezzo_proposto, prezzo_confermato, prezzo_confermato_flag
+        prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
+        appuntamenti_servizi(servizio_id, prezzo_applicato, servizi(id, nome, prezzo, durata_minuti))
       `).order('inizio'),
       supabase.from('clienti').select('id, nome, cognome, telefono, email, indirizzo, note, created_at'),
       supabase.from('animali').select('id, nome, specie, razza_id, colore, data_nascita, zone_critiche, note, operatore_preferito_id, created_at, razze(nome), clienti(nome, cognome)'), 
@@ -442,12 +442,18 @@ export default function StatisticheView() {
   const confermati  = apMese.filter(a => a.stato === 'confermato').length;
   const tassoCompletamento = apMese.length > 0 ? Math.round((completati / apMese.length) * 100) : 0;
 
-  // Usa prezzo_confermato se disponibile, altrimenti prezzo_proposto, altrimenti prezzo del servizio
+  // Usa prezzo_confermato se disponibile, altrimenti prezzo_proposto, altrimenti somma dei servizi
   const getPrezzoAp = (a) => {
     if (a.prezzo_confermato_flag && a.prezzo_confermato) return Number(a.prezzo_confermato);
     if (a.prezzo_proposto) return Number(a.prezzo_proposto);
-    return Number(a.servizi?.prezzo || 0);
+    // Somma prezzi_applicato da appuntamenti_servizi
+    const svs = a.appuntamenti_servizi || [];
+    const totSv = svs.reduce((acc, r) => acc + Number(r.prezzo_applicato || r.servizi?.prezzo || 0), 0);
+    return totSv;
   };
+
+  // Helper: lista servizi di un appuntamento
+  const getServiziAp = (a) => (a.appuntamenti_servizi || []).map(r => r.servizi).filter(Boolean);
 
   const ricavoMese = apMese
     .filter(a => a.stato === 'completato')
@@ -496,9 +502,17 @@ export default function StatisticheView() {
 
   // Per servizio
   const perServizio = servizi.map(s => {
-    const apSv = apMese.filter(a => a.servizi?.id === s.id);
-    const ricavo = apSv.filter(a => a.stato === 'completato')
-      .reduce((acc, a) => acc + getPrezzoAp(a), 0);
+    // Conta appuntamenti del mese che contengono questo servizio
+    const apSv = apMese.filter(a =>
+      (a.appuntamenti_servizi || []).some(r => r.servizio_id === s.id)
+    );
+    // Ricavo: somma prezzo_applicato di questo servizio specifico
+    const ricavo = apSv
+      .filter(a => a.stato === 'completato')
+      .reduce((acc, a) => {
+        const riga = (a.appuntamenti_servizi || []).find(r => r.servizio_id === s.id);
+        return acc + Number(riga?.prezzo_applicato || s.prezzo || 0);
+      }, 0);
     return { nome: s.nome, count: apSv.length, ricavo };
   }).filter(s => s.count > 0).sort((a,b) => b.count - a.count);
 

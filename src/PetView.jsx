@@ -3,7 +3,7 @@
  * Collegato a Supabase: tabelle animali, clienti, operatori, razze
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 import PetBodyMap   from './PetBodyMap';
@@ -53,6 +53,81 @@ const calcEta = (dataNascita) => {
   const mesi = Math.floor((diff % (1000*60*60*24*365)) / (1000*60*60*24*30));
   return anni > 0 ? `${anni} ann${anni===1?'o':'i'}` : `${mesi} mes${mesi===1?'e':'i'}`;
 };
+
+// ─────────────────────────────────────────────────────────────
+// RICERCA RAZZA con searchbox
+// ─────────────────────────────────────────────────────────────
+function RazzaSearch({ razze, value, onChange, onReset }) {
+  const [query, setQuery]       = useState('');
+  const [show,  setShow]        = useState(false);
+  const ref = useRef(null);
+
+  const selezionata = razze.find(r => r.id === value);
+  const filtrate = query.length > 0
+    ? razze.filter(r => r.nome.toLowerCase().includes(query.toLowerCase())).slice(0, 30)
+    : [];
+
+  // Chiudi al click fuori
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  if (selezionata) {
+    return (
+      <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{selezionata.nome}</span>
+        <button onClick={() => { onReset(); setQuery(''); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)' }}>×</button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        placeholder="Cerca razza..."
+        value={query}
+        onChange={e => { setQuery(e.target.value); setShow(true); }}
+        onFocus={() => setShow(true)}
+        style={{ ...inputStyle }}
+        autoComplete="off"
+      />
+      {show && filtrate.length > 0 && (
+        <div style={{
+          position: 'absolute', zIndex: 999, width: '100%', top: 'calc(100% + 4px)',
+          background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          maxHeight: 220, overflowY: 'auto',
+        }}>
+          {filtrate.map(r => (
+            <button key={r.id}
+              onMouseDown={e => { e.preventDefault(); onChange(r.id); setQuery(''); setShow(false); }}
+              style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none',
+                border: 'none', borderBottom: '1px solid var(--card-border-sm)',
+                cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                fontSize: 13, color: 'var(--text-primary)' }}>
+              {r.nome}
+            </button>
+          ))}
+        </div>
+      )}
+      {show && query.length > 0 && filtrate.length === 0 && (
+        <div style={{ position: 'absolute', zIndex: 999, width: '100%', top: 'calc(100% + 4px)',
+          ...glassCard, padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+          Nessuna razza trovata
+        </div>
+      )}
+      {query.length === 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+          Inizia a scrivere per cercare tra {razze.length} razze
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // MODALE AGGIUNGI ANIMALE
@@ -132,10 +207,12 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
         {razzeFiltered.length>0 && (
           <div style={{marginBottom:14}}>
             <div style={secLabel}>Razza</div>
-            <select value={f.razza_id} onChange={e=>set('razza_id',e.target.value)} style={inputStyle}>
-              <option value="">Seleziona razza...</option>
-              {razzeFiltered.map(r=><option key={r.id} value={r.id}>{r.nome}</option>)}
-            </select>
+            <RazzaSearch
+              razze={razzeFiltered}
+              value={f.razza_id}
+              onChange={id => set('razza_id', id)}
+              onReset={() => set('razza_id', '')}
+            />
           </div>
         )}
 
@@ -499,13 +576,34 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
 // ─────────────────────────────────────────────────────────────
 // LISTA ANIMALI
 // ─────────────────────────────────────────────────────────────
+const PAGE_SIZE = 20;
+
 function ListaAnimali({ animali, loading, onSelect, onAdd }) {
-  const [search, setSearch] = useState('');
+  const [search,   setSearch]   = useState('');
+  const [visibili, setVisibili] = useState(PAGE_SIZE);
+  const loaderRef = useRef(null);
+
   const filtered = animali.filter(a =>
     a.nome.toLowerCase().includes(search.toLowerCase()) ||
     `${a.clienti?.cognome||''} ${a.clienti?.nome||''}`.toLowerCase().includes(search.toLowerCase()) ||
     (a.razze?.nome||'').toLowerCase().includes(search.toLowerCase())
   );
+
+  const visibiliList = filtered.slice(0, visibili);
+  const hasMore = visibili < filtered.length;
+
+  // Reset paginazione quando cambia la ricerca
+  useEffect(() => { setVisibili(PAGE_SIZE); }, [search]);
+
+  // IntersectionObserver per infinite scroll
+  useEffect(() => {
+    if (!loaderRef.current || !hasMore) return;
+    const obs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) setVisibili(v => v + PAGE_SIZE);
+    }, { threshold: 0.1 });
+    obs.observe(loaderRef.current);
+    return () => obs.disconnect();
+  }, [hasMore, visibiliList.length]);
 
   return (
     <div style={{maxWidth:720,margin:'0 auto'}}>
@@ -545,7 +643,7 @@ function ListaAnimali({ animali, loading, onSelect, onAdd }) {
         </div>
       ) : (
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {filtered.map((a,i)=>(
+          {visibiliList.map((a,i)=>(
             <motion.button
               key={a.id}
               onClick={()=>onSelect(a)}
@@ -588,6 +686,17 @@ function ListaAnimali({ animali, loading, onSelect, onAdd }) {
               </div>
             </motion.button>
           ))}
+          {/* Sentinel per infinite scroll */}
+          {hasMore && (
+            <div ref={loaderRef} style={{ padding: '16px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              Caricamento altri animali...
+            </div>
+          )}
+          {!hasMore && filtered.length > PAGE_SIZE && (
+            <div style={{ padding: '12px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+              Tutti i {filtered.length} animali caricati
+            </div>
+          )}
         </div>
       )}
     </div>
