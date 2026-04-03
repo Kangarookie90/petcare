@@ -261,6 +261,9 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
   const [cercaCliente, setCercaCliente] = useState('');
   const [showNuovoCliente, setShowNuovoCliente] = useState(false);
+  const [searchMode, setSearchMode]     = useState('cliente'); // 'cliente' | 'animale'
+  const [cercaAnimaleQuery, setCercaAnimaleQuery] = useState('');
+  const [tuttiAnimali, setTuttiAnimali] = useState([]);
   const [showNuovoAnimale, setShowNuovoAnimale] = useState(false);
 
   // Estrai IDs dagli oggetti join (Supabase restituisce oggetti nested, non ID diretti)
@@ -321,6 +324,11 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         set('servizi_ids', ids);
       }
       setServiziCaricati(true);
+      // Fetch tutti gli animali per ricerca per-animale
+      supabase.from('animali')
+        .select('id,nome,specie,cliente_id,problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata,clienti(id,nome,cognome)')
+        .order('nome')
+        .then(({ data }) => setTuttiAnimali(data || []));
     };
     load();
   }, []);
@@ -328,7 +336,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   // Fetch animali quando cambia il cliente
   useEffect(() => {
     if (!f.cliente_id) { setAnimali([]); return; }
-    supabase.from('animali').select('id,nome,specie,razze(nome)')
+    supabase.from('animali').select('id,nome,specie,razze(nome),problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata')
       .eq('cliente_id', f.cliente_id).order('nome')
       .then(({ data }) => setAnimali(data || []));
   }, [f.cliente_id]);
@@ -392,7 +400,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       const SELECT = `
         id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
         clienti(id,nome,cognome), 
-        animali(id,nome,specie), 
+        animali(id,nome,specie,problemi_carattere,problemi_salute), 
         operatori(id,nome,cognome,colore)
       `;
 
@@ -448,6 +456,21 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   // Cerca prima nella lista caricata, poi nel nested object dell'appuntamento (edit mode)
   const clienteSelezionato = clienti.find(c => c.id === f.cliente_id)
     || (appuntamento?.clienti?.id === f.cliente_id ? appuntamento.clienti : null);
+
+  // Quando cambia animale, precompila servizi e durata riservati (solo nuovo appuntamento)
+  useEffect(() => {
+    if (!f.animale_id || isEdit) return;
+    const a = [...animali, ...tuttiAnimali].find(x => x.id === f.animale_id);
+    if (!a) return;
+    if (a.servizi_riservati_ids?.length > 0) {
+      set('servizi_ids', a.servizi_riservati_ids);
+      set('durata_auto', true);
+    }
+    if (a.durata_riservata) {
+      set('durata_minuti', a.durata_riservata);
+      set('durata_auto', false);
+    }
+  }, [f.animale_id, animali]);
 
   // Quando cambia cliente, pre-carica prezzo_riservato — solo se non siamo in edit con prezzo già settato
   useEffect(() => {
@@ -579,8 +602,76 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           </button>
         </div>
 
+        {/* Toggle modalità ricerca */}
+        {!f.blocco_orario && !f.cliente_id && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {[['cliente','👤 Cerca per proprietario'],['animale','🐾 Cerca per animale']].map(([mode, label]) => (
+              <button key={mode} onClick={() => { setSearchMode(mode); setCercaAnimaleQuery(''); setCercaCliente(''); }} style={{
+                flex: 1, padding: '8px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 12, fontWeight: 600,
+                border: `1px solid ${searchMode === mode ? 'rgba(37,99,235,0.4)' : 'var(--card-border)'}`,
+                background: searchMode === mode ? 'rgba(37,99,235,0.12)' : 'var(--card-bg-sm)',
+                color: searchMode === mode ? '#2563eb' : 'var(--text-muted)',
+              }}>{label}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Ricerca per animale */}
+        {!f.blocco_orario && searchMode === 'animale' && !f.cliente_id && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={secLabel}>Cerca animale *</div>
+            <input
+              placeholder="Nome animale..."
+              value={cercaAnimaleQuery}
+              onChange={e => setCercaAnimaleQuery(e.target.value)}
+              style={inputStyle}
+              autoComplete="off"
+            />
+            {cercaAnimaleQuery.length > 1 && (() => {
+              const filtrati = tuttiAnimali.filter(a =>
+                a.nome.toLowerCase().includes(cercaAnimaleQuery.toLowerCase())
+              ).slice(0, 15);
+              return filtrati.length > 0 ? (
+                <div style={{ ...glassCard, marginTop: 4, maxHeight: 200, overflowY: 'auto' }}>
+                  {filtrati.map(a => (
+                    <button key={a.id} onMouseDown={e => {
+                      e.preventDefault();
+                      set('cliente_id', a.cliente_id);
+                      set('animale_id', a.id);
+                      setCercaAnimaleQuery('');
+                    }} style={{
+                      display: 'block', width: '100%', padding: '10px 14px',
+                      background: 'none', border: 'none',
+                      borderBottom: '1px solid var(--card-border-sm)',
+                      cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                    }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display:'flex', alignItems:'center', gap:6 }}>
+                        <span>{a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}</span>
+                        {(a.problemi_salute || a.problemi_carattere) && <span>⚠️</span>}
+                        {(a.servizi_riservati_ids?.length > 0 || a.durata_riservata) && (
+                          <span style={{ fontSize: 10, background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderRadius: 6, padding: '1px 5px', fontWeight: 700 }}>★</span>
+                        )}
+                      </div>
+                      {a.clienti && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {a.clienti.cognome} {a.clienti.nome}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>
+                  Nessun animale trovato
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* Ricerca cliente */}
-        {!f.blocco_orario && <div style={{ marginBottom: 4 }}>
+        {!f.blocco_orario && (searchMode === 'cliente' || f.cliente_id) && <div style={{ marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <div style={secLabel}>Cliente *</div>
             {!showNuovoCliente && (
@@ -601,7 +692,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{clienteSelezionato.telefono}</div>
                 )}
               </div>
-              <button onClick={() => { set('cliente_id', ''); set('animale_id', ''); setCercaCliente(''); }}
+              <button onClick={() => { set('cliente_id', ''); set('animale_id', ''); setCercaCliente(''); setSearchMode('cliente'); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)' }}>×</button>
             </div>
           ) : (
@@ -671,6 +762,9 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                   }}>
                     {a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}
                     {a.razze?.nome && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>({a.razze.nome})</span>}
+                    {(a.servizi_riservati_ids?.length > 0 || a.durata_riservata) && (
+                      <span style={{ fontSize: 10, background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderRadius: 6, padding: '1px 5px', fontWeight: 700 }}>★</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -691,6 +785,45 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
             </AnimatePresence>
           </div>
         )}
+
+        {/* Alert problemi animale */}
+        {(() => {
+          const animaleSelezionato = animali.find(a => a.id === f.animale_id);
+          const hasProblemiSalute    = animaleSelezionato?.problemi_salute?.trim();
+          const hasProblemiCarattere = animaleSelezionato?.problemi_carattere?.trim();
+          if (!hasProblemiSalute && !hasProblemiCarattere) return null;
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                marginBottom: 16,
+                borderRadius: 14,
+                background: 'rgba(234,179,8,0.10)',
+                border: '1.5px solid rgba(234,179,8,0.35)',
+                padding: '12px 14px',
+                display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}
+            >
+              <div style={{ fontSize: 20, flexShrink: 0, lineHeight: 1 }}>⚠️</div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  Attenzione — note sull'animale
+                </div>
+                {hasProblemiSalute && (
+                  <div style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: hasProblemiCarattere ? 4 : 0 }}>
+                    <span style={{ fontWeight: 600 }}>Salute:</span> {animaleSelezionato.problemi_salute}
+                  </div>
+                )}
+                {hasProblemiCarattere && (
+                  <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>
+                    <span style={{ fontWeight: 600 }}>Carattere:</span> {animaleSelezionato.problemi_carattere}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* Operatore */}
         <div style={{ marginBottom: 16 }}>
@@ -924,7 +1057,7 @@ export default function CalendarioView() {
       supabase.from('appuntamenti').select(`
         id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
         clienti(id,nome,cognome),
-        animali(id,nome,specie),
+        animali(id,nome,specie,problemi_carattere,problemi_salute),
         operatori(id,nome,cognome,colore),
         appuntamenti_servizi(servizio_id, prezzo_applicato, servizi(id,nome,prezzo,durata_minuti))
       `).neq('stato', 'cancellato'),
@@ -961,6 +1094,7 @@ export default function CalendarioView() {
         animaleNome:   a.animali?.nome || '',
         servizioNome:  serviziNomi,
         operatoreNome: op?.nome || '',
+        hasAlert:      !!(a.animali?.problemi_salute || a.animali?.problemi_carattere),
       },
     };
   });
@@ -1160,7 +1294,7 @@ export default function CalendarioView() {
             height="calc(100vh - 200px)"
             expandRows={true}
             eventContent={({ event, timeText }) => {
-              const { animaleNome, servizioNome, operatoreNome, prezzoOk } = event.extendedProps;
+              const { animaleNome, servizioNome, operatoreNome, prezzoOk, hasAlert } = event.extendedProps;
               const servizi = Array.isArray(servizioNome) ? servizioNome : (servizioNome ? [servizioNome] : []);
               return (
                 <div style={{
@@ -1186,6 +1320,12 @@ export default function CalendarioView() {
                           <path d="M2 5l2.5 2.5 3.5-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       </div>
+                    )}
+                    {hasAlert && (
+                      <div style={{
+                        fontSize: 11, flexShrink: 0, lineHeight: 1,
+                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
+                      }}>⚠️</div>
                     )}
                     <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                       {animaleNome}

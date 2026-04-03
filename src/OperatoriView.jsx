@@ -4,7 +4,7 @@
  * Collegato a Supabase: tabella operatori
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 
@@ -128,9 +128,76 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
     telefono:operatore?.telefono|| '',
     note:    operatore?.note    || '',
   });
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState('');
+  const [fotoUrl,       setFotoUrl]       = useState(null);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [fotoError,     setFotoError]     = useState('');
+  const fotoInputRef = useRef(null);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  // Carica signed URL foto esistente
+  useEffect(() => {
+    if (!operatore?.foto_url) return;
+    supabase.storage.from('operatori-foto').createSignedUrl(operatore.foto_url, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setFotoUrl(data.signedUrl); });
+  }, []);
+
+  // Comprimi immagine con Canvas (max 600x600, JPEG 85%)
+  const comprimi = (file) => new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 600;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+        else { width = Math.round(width * MAX / height); height = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(resolve, 'image/jpeg', 0.85);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+
+  const handleFotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !isEdit) return;
+    setUploadingFoto(true); setFotoError('');
+    try {
+      const compressed = await comprimi(file);
+      const path = `${operatore.id}/${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage.from('operatori-foto').upload(path, compressed, {
+        contentType: 'image/jpeg', upsert: true,
+      });
+      if (upErr) throw upErr;
+      if (operatore.foto_url && operatore.foto_url !== path) {
+        await supabase.storage.from('operatori-foto').remove([operatore.foto_url]);
+      }
+      await supabase.from('operatori').update({ foto_url: path }).eq('id', operatore.id);
+      const { data } = await supabase.storage.from('operatori-foto').createSignedUrl(path, 3600);
+      if (data?.signedUrl) setFotoUrl(data.signedUrl);
+      // Aggiorna l'operatore in memoria
+      onSaved({ ...operatore, foto_url: path });
+    } catch (err) {
+      setFotoError('Errore upload: ' + (err.message || 'riprova'));
+    } finally {
+      setUploadingFoto(false);
+      if (fotoInputRef.current) fotoInputRef.current.value = '';
+    }
+  };
+
+  const handleFotoRemove = async () => {
+    if (!operatore?.foto_url || !isEdit) return;
+    if (!window.confirm('Eliminare la foto?')) return;
+    await supabase.storage.from('operatori-foto').remove([operatore.foto_url]);
+    await supabase.from('operatori').update({ foto_url: null }).eq('id', operatore.id);
+    setFotoUrl(null);
+    onSaved({ ...operatore, foto_url: null });
+  };
 
   const save = async () => {
     if (!f.nome.trim())    { setError('Inserisci il nome'); return; }
@@ -191,15 +258,54 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 14,
-              background: f.colore,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, fontWeight: 700, color: '#fff',
-              boxShadow: `0 4px 12px ${f.colore}55`,
-            }}>
-              {(f.nome[0] || '?').toUpperCase()}
+            {/* Avatar cliccabile solo in modifica */}
+            <div style={{ position: 'relative' }}>
+              <div
+                onClick={() => isEdit && fotoInputRef.current?.click()}
+                style={{
+                  width: 48, height: 48, borderRadius: 16, overflow: 'hidden',
+                  background: fotoUrl ? 'transparent' : f.colore,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 18, fontWeight: 700, color: '#fff',
+                  boxShadow: `0 4px 12px ${f.colore}55`,
+                  cursor: isEdit ? 'pointer' : 'default',
+                  border: fotoUrl ? '2px solid rgba(255,255,255,0.7)' : 'none',
+                  position: 'relative',
+                }}
+              >
+                {fotoUrl
+                  ? <img src={fotoUrl} alt={f.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : (f.nome[0] || '?').toUpperCase()
+                }
+                {isEdit && (
+                  <div style={{
+                    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: 0, transition: 'opacity 0.2s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                    onMouseLeave={e => e.currentTarget.style.opacity = 0}
+                  >
+                    <span style={{ fontSize: 16 }}>{uploadingFoto ? '⏳' : '📷'}</span>
+                  </div>
+                )}
+              </div>
+              {fotoUrl && isEdit && (
+                <button onClick={handleFotoRemove} style={{
+                  position: 'absolute', top: -5, right: -5,
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: '#dc2626', color: '#fff', border: '1.5px solid #fff',
+                  fontSize: 9, cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'inherit', lineHeight: 1, padding: 0,
+                }}>×</button>
+              )}
+              <input ref={fotoInputRef} type="file" accept="image/*"
+                onChange={handleFotoUpload} style={{ display: 'none' }} />
             </div>
+            {fotoError && (
+              <div style={{ fontSize: 11, color: '#dc2626' }}>{fotoError}</div>
+            )}
             <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
               {isEdit ? 'Modifica operatore' : 'Nuovo operatore'}
             </div>
@@ -472,6 +578,34 @@ export default function OperatoriView() {
   );
 }
 
+// ── Avatar operatore con foto o iniziali ─────────────────────
+function AvatarOperatore({ op, size = 46, radius = 16 }) {
+  const [fotoUrl, setFotoUrl] = useState(null);
+
+  useEffect(() => {
+    if (!op.foto_url) return;
+    supabase.storage.from('operatori-foto').createSignedUrl(op.foto_url, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setFotoUrl(data.signedUrl); });
+  }, [op.foto_url]);
+
+  const colore = op.colore || '#2563eb';
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: radius, flexShrink: 0, overflow: 'hidden',
+      background: fotoUrl ? 'transparent' : colore,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(size * 0.38), fontWeight: 700, color: '#fff',
+      boxShadow: `0 4px 12px ${colore}44`,
+      border: fotoUrl ? `2px solid rgba(255,255,255,0.7)` : 'none',
+    }}>
+      {fotoUrl
+        ? <img src={fotoUrl} alt={op.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : `${op.nome[0] || ''}${op.cognome?.[0] || ''}`
+      }
+    </div>
+  );
+}
+
 // ── Card singolo operatore ────────────────────────────────────
 function OperatoreCard({ operatore: op, delay, disattivo, onClick }) {
   return (
@@ -490,16 +624,8 @@ function OperatoreCard({ operatore: op, delay, disattivo, onClick }) {
         opacity: disattivo ? 0.6 : 1,
       }}
     >
-      {/* Avatar */}
-      <div style={{
-        width: 46, height: 46, borderRadius: 16, flexShrink: 0,
-        background: op.colore || '#2563eb',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 18, fontWeight: 700, color: '#fff',
-        boxShadow: `0 4px 12px ${op.colore || '#2563eb'}44`,
-      }}>
-        {op.nome[0]}{op.cognome?.[0]}
-      </div>
+      {/* Avatar — foto o iniziali */}
+      <AvatarOperatore op={op} size={46} radius={16} />
 
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>

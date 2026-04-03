@@ -55,6 +55,102 @@ const calcEta = (dataNascita) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// RICERCA CLIENTE con searchbox (per 2000+ clienti)
+// ─────────────────────────────────────────────────────────────
+function ClienteSearch({ clienti, value, onChange }) {
+  const [query, setQuery] = useState('');
+  const [show,  setShow]  = useState(false);
+  const ref = useRef(null);
+
+  const selezionato = clienti.find(c => c.id === value);
+  const filtrati = query.length > 1
+    ? clienti.filter(c =>
+        `${c.cognome} ${c.nome} ${c.telefono || ''}`.toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 20)
+    : [];
+
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  if (selezionato) {
+    return (
+      <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+            {selezionato.cognome} {selezionato.nome}
+          </div>
+          {selezionato.telefono && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{selezionato.telefono}</div>
+          )}
+        </div>
+        <button onClick={() => { onChange(''); setQuery(''); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)' }}>×</button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        placeholder="Cerca per cognome, nome o telefono..."
+        value={query}
+        autoFocus
+        onChange={e => { setQuery(e.target.value); setShow(true); }}
+        onFocus={() => query.length > 1 && setShow(true)}
+        style={{ ...inputStyle }}
+        autoComplete="off"
+      />
+      {show && filtrati.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          zIndex: 9999,
+          width: 380,
+          background: 'var(--dropdown-bg, #ffffff)',
+          border: '1px solid var(--card-border)',
+          borderRadius: 12,
+          boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+          maxHeight: 240,
+          overflowY: 'auto',
+        }}>
+          {filtrati.map(c => (
+            <button key={c.id}
+              onMouseDown={e => { e.preventDefault(); onChange(c.id); setQuery(''); setShow(false); }}
+              style={{
+                display: 'block', width: '100%', padding: '10px 14px',
+                background: 'none', border: 'none',
+                borderBottom: '1px solid var(--card-border-sm)',
+                cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+              }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {c.cognome} {c.nome}
+              </div>
+              {c.telefono && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.telefono}</div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {query.length > 0 && query.length <= 1 && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+          Scrivi almeno 2 caratteri per cercare tra {clienti.length} clienti
+        </div>
+      )}
+      {show && query.length > 1 && filtrati.length === 0 && (
+        <div style={{ position: 'fixed', zIndex: 9999, width: 380,
+          ...glassCard, padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+          Nessun cliente trovato
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // RICERCA RAZZA con searchbox
 // ─────────────────────────────────────────────────────────────
 function RazzaSearch({ razze, value, onChange, onReset }) {
@@ -97,10 +193,10 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
       />
       {show && filtrate.length > 0 && (
         <div style={{
-          position: 'absolute', zIndex: 999, width: '100%', top: 'calc(100% + 4px)',
-          background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          maxHeight: 220, overflowY: 'auto',
+          position: 'fixed', zIndex: 9999, width: 380,
+          background: 'var(--dropdown-bg, #ffffff)', border: '1px solid var(--card-border)',
+          borderRadius: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+          maxHeight: 240, overflowY: 'auto',
         }}>
           {filtrate.map(r => (
             <button key={r.id}
@@ -115,7 +211,7 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
         </div>
       )}
       {show && query.length > 0 && filtrate.length === 0 && (
-        <div style={{ position: 'absolute', zIndex: 999, width: '100%', top: 'calc(100% + 4px)',
+        <div style={{ position: 'fixed', zIndex: 9999, width: 380,
           ...glassCard, padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
           Nessuna razza trovata
         </div>
@@ -164,6 +260,10 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
       style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(10,24,64,0.35)',
         backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}
       onClick={e => e.target===e.currentTarget && onClose()}>
+      <style>{`
+        :root { --dropdown-bg: #ffffff; }
+        @media (prefers-color-scheme: dark) { :root { --dropdown-bg: #1a2d5a; } }
+      `}</style>
       <motion.div
         initial={{ opacity: 0, y: 24, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -178,10 +278,11 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
 
         <div style={{marginBottom:14}}>
           <div style={secLabel}>Proprietario *</div>
-          <select value={f.cliente_id} onChange={e=>set('cliente_id',e.target.value)} style={inputStyle}>
-            <option value="">Seleziona cliente...</option>
-            {clienti.map(c=><option key={c.id} value={c.id}>{c.cognome} {c.nome}</option>)}
-          </select>
+          <ClienteSearch
+            clienti={clienti}
+            value={f.cliente_id}
+            onChange={id => set('cliente_id', id)}
+          />
         </div>
 
         <div style={{marginBottom:14}}>
@@ -389,9 +490,90 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const [editing, setEditing] = useState(null);
   const [editVal, setEditVal] = useState('');
   const [saving,  setSaving]  = useState(false);
+  const [servizi,         setServizi]         = useState([]);
+  const [savingRiservato, setSavingRiservato] = useState(false);
+  const [fotoUrl,         setFotoUrl]         = useState(null);
+  const [uploadingFoto,   setUploadingFoto]   = useState(false);
+  const [fotoError,       setFotoError]       = useState('');
+  const fotoInputRef = useRef(null);
+
+  useEffect(() => {
+    supabase.from('servizi').select('id,nome,durata_minuti').order('nome')
+      .then(({ data }) => setServizi(data || []));
+  }, []);
+
+  // Carica signed URL per la foto
+  useEffect(() => {
+    if (!animale.foto_url) return;
+    supabase.storage.from('animali-foto').createSignedUrl(animale.foto_url, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setFotoUrl(data.signedUrl); });
+  }, [animale.foto_url]);
+
+  // Comprimi immagine con Canvas (max 800x800, JPEG 80%)
+  const comprimi = (file) => new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 800;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+        else { width = Math.round(width * MAX / height); height = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(resolve, 'image/jpeg', 0.80);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+
+  const handleFotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFoto(true); setFotoError('');
+    try {
+      const compressed = await comprimi(file);
+      const path = `${animale.id}/${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage.from('animali-foto').upload(path, compressed, {
+        contentType: 'image/jpeg', upsert: true,
+      });
+      if (upErr) throw upErr;
+      // Elimina vecchia foto se esiste
+      if (animale.foto_url && animale.foto_url !== path) {
+        await supabase.storage.from('animali-foto').remove([animale.foto_url]);
+      }
+      await supabase.from('animali').update({ foto_url: path }).eq('id', animale.id);
+      onUpdate({ ...animale, foto_url: path });
+      // Genera signed url per preview immediata
+      const { data } = await supabase.storage.from('animali-foto').createSignedUrl(path, 3600);
+      if (data?.signedUrl) setFotoUrl(data.signedUrl);
+    } catch (err) {
+      setFotoError('Errore upload: ' + (err.message || 'riprova'));
+    } finally {
+      setUploadingFoto(false);
+      if (fotoInputRef.current) fotoInputRef.current.value = '';
+    }
+  };
+
+  const handleFotoRemove = async () => {
+    if (!animale.foto_url) return;
+    if (!window.confirm('Eliminare la foto?')) return;
+    await supabase.storage.from('animali-foto').remove([animale.foto_url]);
+    await supabase.from('animali').update({ foto_url: null }).eq('id', animale.id);
+    onUpdate({ ...animale, foto_url: null });
+    setFotoUrl(null);
+  };
+
+  const saveRiservato = async (updates) => {
+    setSavingRiservato(true);
+    await supabase.from('animali').update(updates).eq('id', animale.id);
+    onUpdate({ ...animale, ...updates });
+    setSavingRiservato(false);
+  };
 
   const CAMPI = [
-    { field:'servizi_abituali',       label:'✂️ Servizi abituali' },
     { field:'preferenze_proprietario',label:'💬 Preferenze proprietario' },
     { field:'problemi_salute',         label:'🏥 Problemi di salute' },
     { field:'problemi_carattere',      label:'🧠 Problemi caratteriali' },
@@ -420,11 +602,55 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
 
       {/* Header card */}
       <div style={{...glass,padding:'18px 20px',marginBottom:14,display:'flex',alignItems:'center',gap:14}}>
-        <div style={{width:52,height:52,borderRadius:'50%',background:'linear-gradient(145deg,#5aabff,#2060dd)',
-          display:'flex',alignItems:'center',justifyContent:'center',fontSize:26,flexShrink:0,
-          boxShadow:'0 4px 14px rgba(50,100,220,0.35)'}}>
-          {specieEmoji(animale.specie)}
+        {/* Avatar — foto o emoji */}
+        <div style={{position:'relative', flexShrink:0}}>
+          <div
+            onClick={() => fotoInputRef.current?.click()}
+            style={{
+              width:64, height:64, borderRadius:18,
+              background: fotoUrl ? 'transparent' : 'linear-gradient(145deg,#5aabff,#2060dd)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:28, cursor:'pointer', overflow:'hidden',
+              boxShadow:'0 4px 14px rgba(50,100,220,0.35)',
+              border: fotoUrl ? '2px solid rgba(255,255,255,0.7)' : 'none',
+            }}
+          >
+            {fotoUrl
+              ? <img src={fotoUrl} alt={animale.nome} style={{width:'100%',height:'100%',objectFit:'cover'}} />
+              : specieEmoji(animale.specie)
+            }
+            {/* Overlay camera al hover */}
+            <div style={{
+              position:'absolute', inset:0, background:'rgba(0,0,0,0.35)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              opacity:0, transition:'opacity 0.2s',
+              borderRadius:18,
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity=1}
+              onMouseLeave={e => e.currentTarget.style.opacity=0}
+            >
+              <span style={{fontSize:20}}>{uploadingFoto ? '⏳' : '📷'}</span>
+            </div>
+          </div>
+          {/* Tasto rimuovi foto */}
+          {fotoUrl && (
+            <button onClick={handleFotoRemove} style={{
+              position:'absolute', top:-6, right:-6,
+              width:18, height:18, borderRadius:'50%',
+              background:'#dc2626', color:'#fff', border:'2px solid #fff',
+              fontSize:10, cursor:'pointer', display:'flex',
+              alignItems:'center', justifyContent:'center',
+              fontFamily:'inherit', lineHeight:1, padding:0,
+            }}>×</button>
+          )}
+          <input ref={fotoInputRef} type="file" accept="image/*"
+            onChange={handleFotoUpload} style={{display:'none'}} />
         </div>
+        {fotoError && (
+          <div style={{fontSize:11, color:'#dc2626', position:'absolute', marginTop:68, marginLeft:0}}>
+            {fotoError}
+          </div>
+        )}
         <div style={{flex:1}}>
           <div style={{fontSize:20,fontWeight:700,color:'var(--text-primary)',letterSpacing:'-0.4px'}}>{animale.nome}</div>
           <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:2}}>
@@ -499,6 +725,74 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
                   {op.nome}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Impostazioni riservate */}
+          <div style={{...glass, padding:'15px 17px'}}>
+            <div style={{...secLabel, marginBottom:4}}>⭐ Impostazioni riservate</div>
+            <div style={{fontSize:11, color:'var(--text-muted)', marginBottom:12}}>
+              Precompilano automaticamente il calendario alla prenotazione
+            </div>
+
+            {/* Servizi riservati — selezione multipla */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:12, fontWeight:600, color:'var(--text-secondary)', marginBottom:8}}>✂️ Servizi preferiti</div>
+              <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+                {servizi.map(s => {
+                  const ids = animale.servizi_riservati_ids || [];
+                  const sel = ids.includes(s.id);
+                  return (
+                    <button key={s.id} onClick={async () => {
+                      const nuovi = sel ? ids.filter(id => id !== s.id) : [...ids, s.id];
+                      await saveRiservato({ servizi_riservati_ids: nuovi });
+                    }} style={{
+                      padding:'7px 12px', borderRadius:10, cursor:'pointer',
+                      fontFamily:'inherit', fontSize:12, fontWeight:600,
+                      border:`1px solid ${sel ? 'rgba(37,99,235,0.4)' : 'var(--card-border)'}`,
+                      background: sel ? 'rgba(37,99,235,0.12)' : 'var(--card-bg-sm)',
+                      color: sel ? '#2563eb' : 'var(--text-primary)',
+                      display:'flex', alignItems:'center', gap:6,
+                    }}>
+                      {sel && <span style={{fontSize:10}}>✓</span>}
+                      {s.nome}
+                      {s.durata_minuti && <span style={{fontSize:10, opacity:0.6}}>{s.durata_minuti}min</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {(animale.servizi_riservati_ids?.length > 0) && (
+                <div style={{fontSize:11, color:'var(--text-muted)', marginTop:6}}>
+                  {animale.servizi_riservati_ids.length} servizio/i selezionato/i
+                </div>
+              )}
+            </div>
+
+            {/* Durata riservata */}
+            <div>
+              <div style={{fontSize:12, fontWeight:600, color:'var(--text-secondary)', marginBottom:8}}>⏱️ Durata preferita</div>
+              <div style={{display:'flex', gap:10, alignItems:'center'}}>
+                <input
+                  type="number" min="5" max="480" step="5"
+                  placeholder="Es. 90"
+                  defaultValue={animale.durata_riservata || ''}
+                  onBlur={async e => {
+                    const val = e.target.value ? Number(e.target.value) : null;
+                    if (val !== animale.durata_riservata) await saveRiservato({ durata_riservata: val });
+                  }}
+                  style={{...inputStyle, width:100}}
+                />
+                <span style={{fontSize:12, color:'var(--text-muted)'}}>minuti</span>
+                {animale.durata_riservata && (
+                  <span style={{fontSize:12, color:'#2563eb', fontWeight:600}}>
+                    {Math.floor(animale.durata_riservata/60) > 0 ? `${Math.floor(animale.durata_riservata/60)}h ` : ''}
+                    {animale.durata_riservata%60 > 0 ? `${animale.durata_riservata%60}min` : ''}
+                  </span>
+                )}
+              </div>
+              <div style={{fontSize:11, color:'var(--text-muted)', marginTop:5}}>
+                Lascia vuoto per usare la somma dei servizi selezionati
+              </div>
             </div>
           </div>
 
@@ -720,7 +1014,7 @@ export default function PetView() {
   const fetchAll = async () => {
     setLoading(true);
     const [an, cl, op, rz] = await Promise.all([
-      supabase.from('animali').select('*, clienti(id,nome,cognome), razze(id,nome), operatori(id,nome,cognome)').order('nome'),
+      supabase.from('animali').select('*, clienti(id,nome,cognome), razze(id,nome), operatori(id,nome,cognome)').order('nome'), // foto_url incluso in *
       supabase.from('clienti').select('id,nome,cognome').order('cognome'),
       supabase.from('operatori').select('id,nome,cognome').eq('attivo',true).order('nome'),
       supabase.from('razze').select('id,nome,specie').order('nome'),
