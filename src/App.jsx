@@ -7,6 +7,7 @@ import CalendarioView from './CalendarioView';
 import StatisticheView from './StatisticheView';
 import OperatoriView from './OperatoriView';
 import OfflineIndicator from './OfflineIndicator';
+import PrimanotaView from './PrimanotaView';
 
 // ── Varianti animazione pagine ──────────────────────────────
 const pageVariants = {
@@ -76,6 +77,16 @@ const NAV_ITEMS = [
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M18 20V10M12 20V4M6 20v-6" />
+      </svg>
+    ),
+  },
+  {
+    id: "primanota",
+    label: "Prima Nota",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <path d="M14 2v6h6M12 18v-6M9 15h6"/>
       </svg>
     ),
   },
@@ -306,6 +317,7 @@ export default function App() {
       case "pet":        return <PetView key="pet" />;
       case "operatori":    return <OperatoriView key="operatori" />;
       case "statistiche":  return <StatisticheView key="statistiche" />;
+      case "primanota":    return <PrimanotaView key="primanota" />;
       default:           return null;
     }
   };
