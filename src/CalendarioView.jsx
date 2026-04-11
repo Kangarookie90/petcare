@@ -153,19 +153,11 @@ function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
     >
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Nuovo animale</div>
 
-      {/* Nome */}
       <div style={{ marginBottom: 10 }}>
         <div style={secLabel}>Nome *</div>
-        <input
-          autoFocus
-          value={f.nome}
-          onChange={e => set('nome', e.target.value)}
-          placeholder="Rex, Luna..."
-          style={inputStyle}
-        />
+        <input autoFocus value={f.nome} onChange={e => set('nome', e.target.value)} placeholder="Rex, Luna..." style={inputStyle} />
       </div>
 
-      {/* Specie */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         {['cane', 'gatto', 'altro'].map(s => (
           <button key={s} onClick={() => { set('specie', s); set('razza_id', ''); setCercaRazza(''); }} style={{
@@ -179,7 +171,6 @@ function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
         ))}
       </div>
 
-      {/* Ricerca razza */}
       <div style={{ marginBottom: 12, position: 'relative', zIndex: 1000 }}>
         <div style={secLabel}>Razza</div>
         {razzaSelezionata ? (
@@ -261,12 +252,11 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
   const [cercaCliente, setCercaCliente] = useState('');
   const [showNuovoCliente, setShowNuovoCliente] = useState(false);
-  const [searchMode, setSearchMode]     = useState('cliente'); // 'cliente' | 'animale'
+  const [searchMode, setSearchMode]     = useState('cliente');
   const [cercaAnimaleQuery, setCercaAnimaleQuery] = useState('');
   const [tuttiAnimali, setTuttiAnimali] = useState([]);
   const [showNuovoAnimale, setShowNuovoAnimale] = useState(false);
 
-  // Estrai IDs dagli oggetti join (Supabase restituisce oggetti nested, non ID diretti)
   const initClienteId   = appuntamento?.clienti?.id   || appuntamento?.cliente_id   || '';
   const initAnimaleId   = appuntamento?.animali?.id   || appuntamento?.animale_id   || '';
   const initOperatoreId = appuntamento?.operatori?.id || appuntamento?.operatore_id || '';
@@ -289,16 +279,16 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     note:          appuntamento?.note || '',
     stato:         appuntamento?.stato || 'confermato',
     blocco_orario: false,
-    prezzo_proposto:   appuntamento?.prezzo_proposto || '',
-    prezzo_confermato: appuntamento?.prezzo_confermato || '',
+    prezzo_proposto:        appuntamento?.prezzo_proposto || '',
+    prezzo_confermato:      appuntamento?.prezzo_confermato || '',
     prezzo_confermato_flag: appuntamento?.prezzo_confermato_flag || false,
+    metodo_pagamento:       appuntamento?.metodo_pagamento || 'contanti', // ← NUOVO
   });
   const [loading, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
 
-  // Fetch dati iniziali
   useEffect(() => {
     const load = async () => {
       const promises = [
@@ -306,7 +296,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         supabase.from('servizi').select('id,nome,durata_minuti,prezzo').order('nome'),
         supabase.from('razze').select('id,nome,specie').order('nome'),
       ];
-      // Se siamo in modifica, carica anche i servizi associati
       if (appuntamento?.id) {
         promises.push(
           supabase.from('appuntamenti_servizi')
@@ -318,13 +307,11 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       setClienti(cl.data || []);
       setServizi(sv.data || []);
       setRazze(rz.data || []);
-      // Imposta i servizi già associati all'appuntamento
       if (apSv?.data?.length > 0) {
         const ids = apSv.data.map(r => r.servizio_id);
         set('servizi_ids', ids);
       }
       setServiziCaricati(true);
-      // Fetch tutti gli animali per ricerca per-animale
       supabase.from('animali')
         .select('id,nome,specie,cliente_id,problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata,clienti(id,nome,cognome)')
         .order('nome')
@@ -333,7 +320,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     load();
   }, []);
 
-  // Fetch animali quando cambia il cliente
   useEffect(() => {
     if (!f.cliente_id) { setAnimali([]); return; }
     supabase.from('animali').select('id,nome,specie,razze(nome),problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata')
@@ -341,7 +327,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       .then(({ data }) => setAnimali(data || []));
   }, [f.cliente_id]);
 
-  // Calcola durata automatica dai servizi selezionati
   useEffect(() => {
     if (!f.durata_auto) return;
     const tot = f.servizi_ids.reduce((acc, sid) => {
@@ -387,7 +372,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         cliente_id:    f.blocco_orario ? null : f.cliente_id,
         animale_id:    f.blocco_orario ? null : f.animale_id,
         operatore_id:  f.operatore_id,
-        servizio_id:   f.servizi_ids[0] || null, // primo per compatibilità
+        servizio_id:   f.servizi_ids[0] || null,
         inizio:        inizio.toISOString(),
         fine:          fine.toISOString(),
         note:          f.note.trim() || null,
@@ -395,10 +380,11 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         prezzo_proposto:        f.prezzo_proposto !== '' ? Number(f.prezzo_proposto) : null,
         prezzo_confermato:      f.prezzo_confermato !== '' ? Number(f.prezzo_confermato) : null,
         prezzo_confermato_flag: f.prezzo_confermato_flag,
+        metodo_pagamento:       f.metodo_pagamento, // ← NUOVO
       };
 
       const SELECT = `
-        id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
+        id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag, metodo_pagamento,
         clienti(id,nome,cognome), 
         animali(id,nome,specie,problemi_carattere,problemi_salute), 
         operatori(id,nome,cognome,colore)
@@ -419,7 +405,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
       const apId = result.data.id;
 
-      // Salva servizi su appuntamenti_servizi (cancella e reinserisci)
       await supabase.from('appuntamenti_servizi').delete().eq('appuntamento_id', apId);
       if (f.servizi_ids.length > 0) {
         const righeServizi = f.servizi_ids.map(sid => {
@@ -434,7 +419,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         if (svErr) console.error('[CalendarioView] errore salvataggio servizi:', svErr);
       }
 
-      // Aggiungi servizi al risultato per aggiornare il calendario
       const serviziAssociati = f.servizi_ids.map(sid => servizi.find(x => x.id === sid)).filter(Boolean);
       onSaved({ ...result.data, _serviziMultipli: serviziAssociati });
       onClose();
@@ -453,11 +437,9 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     onClose();
   };
 
-  // Cerca prima nella lista caricata, poi nel nested object dell'appuntamento (edit mode)
   const clienteSelezionato = clienti.find(c => c.id === f.cliente_id)
     || (appuntamento?.clienti?.id === f.cliente_id ? appuntamento.clienti : null);
 
-  // Quando cambia animale, precompila servizi e durata riservati (solo nuovo appuntamento)
   useEffect(() => {
     if (!f.animale_id || isEdit) return;
     const a = [...animali, ...tuttiAnimali].find(x => x.id === f.animale_id);
@@ -472,10 +454,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     }
   }, [f.animale_id, animali]);
 
-  // Quando cambia cliente, pre-carica prezzo_riservato — solo se non siamo in edit con prezzo già settato
   useEffect(() => {
     if (!f.cliente_id || !clienti.length) return;
-    // In edit non sovrascrivere il prezzo già salvato
     if (isEdit && f.prezzo_proposto !== '') return;
     const c = clienti.find(x => x.id === f.cliente_id);
     if (c?.prezzo_riservato) {
@@ -483,7 +463,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     }
   }, [f.cliente_id, clienti]);
 
-  // Quando cambiano i servizi, calcola prezzo totale dalla somma
   useEffect(() => {
     if (f.servizi_ids.length === 0) return;
     if (isEdit && f.prezzo_proposto !== '' && !serviziCaricati) return;
@@ -797,8 +776,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               style={{
-                marginBottom: 16,
-                borderRadius: 14,
+                marginBottom: 16, borderRadius: 14,
                 background: 'rgba(234,179,8,0.10)',
                 border: '1.5px solid rgba(234,179,8,0.35)',
                 padding: '12px 14px',
@@ -913,7 +891,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           </div>
           {durataConsigliata > 0 && Number(f.durata_minuti) !== durataConsigliata && (
             <div style={{ fontSize: 11, color: '#d97706', marginTop: 5 }}>
-              La durata consigliata dai trattamenti selezionati e di {durataConsigliata} minuti
+              La durata consigliata dai trattamenti selezionati è di {durataConsigliata} minuti
             </div>
           )}
         </div>
@@ -931,7 +909,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           <div style={{ marginBottom: 16 }}>
             <div style={secLabel}>Prezzo</div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              {/* Prezzo riservato (da anagrafica) */}
               {clienteSelezionato?.prezzo_riservato && (
                 <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Riservato</div>
@@ -940,7 +917,6 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                   </div>
                 </div>
               )}
-              {/* Prezzo proposto (modificabile) */}
               <div style={{ flex: 1, minWidth: 140 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 5 }}>
                   {clienteSelezionato?.prezzo_riservato ? 'Prezzo applicato' : 'Prezzo proposto'}
@@ -957,17 +933,42 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               </div>
             </div>
 
-            {/* Sezione conferma prezzo — solo in modifica e se completato */}
+            {/* Sezione conferma prezzo — solo in modifica */}
             {isEdit && (
               <div style={{ marginTop: 12, padding: '14px', borderRadius: 14,
                 background: f.prezzo_confermato_flag ? 'rgba(5,150,105,0.08)' : 'rgba(217,119,6,0.08)',
                 border: `1px solid ${f.prezzo_confermato_flag ? 'rgba(5,150,105,0.25)' : 'rgba(217,119,6,0.25)'}` }}>
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: f.prezzo_confermato_flag ? '#059669' : '#d97706',
                     textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     {f.prezzo_confermato_flag ? '✓ Prezzo confermato' : 'Conferma prezzo finale'}
                   </div>
                 </div>
+
+                {/* ── Toggle metodo pagamento ── */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {[
+                    { id: 'contanti', label: '💵 Contanti', activeColor: '#059669', activeBg: 'rgba(5,150,105,0.15)', activeBorder: 'rgba(5,150,105,0.4)' },
+                    { id: 'pos',      label: '💳 POS',      activeColor: '#7c3aed', activeBg: 'rgba(124,58,237,0.15)', activeBorder: 'rgba(124,58,237,0.4)' },
+                  ].map(m => {
+                    const attivo = f.metodo_pagamento === m.id;
+                    return (
+                      <button key={m.id} onClick={() => set('metodo_pagamento', m.id)} style={{
+                        flex: 1, padding: '8px 12px', borderRadius: 10, cursor: 'pointer',
+                        fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+                        border: `1px solid ${attivo ? m.activeBorder : 'var(--card-border)'}`,
+                        background: attivo ? m.activeBg : 'transparent',
+                        color: attivo ? m.activeColor : 'var(--text-muted)',
+                        transition: 'all 0.15s',
+                      }}>
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Input + bottone conferma */}
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <div style={{ position: 'relative', flex: 1 }}>
                     <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
@@ -1001,15 +1002,17 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                     {f.prezzo_confermato_flag ? '✓ Confermato' : 'Conferma'}
                   </button>
                 </div>
+
                 {f.prezzo_confermato_flag && (
                   <div style={{ fontSize: 11, color: '#059669', marginTop: 8, fontWeight: 500 }}>
-                    Prezzo finale registrato: € {Number(f.prezzo_confermato).toFixed(2)}
+                    Prezzo finale: € {Number(f.prezzo_confermato).toFixed(2)} —{' '}
+                    <span style={{ color: f.metodo_pagamento === 'pos' ? '#7c3aed' : '#059669', fontWeight: 700 }}>
+                      {f.metodo_pagamento === 'pos' ? '💳 POS' : '💵 Contanti'}
+                    </span>
                   </div>
                 )}
               </div>
             )}
-
-
           </div>
         )}
 
@@ -1055,7 +1058,8 @@ export default function CalendarioView() {
     const [op, ap] = await Promise.all([
       supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome'),
       supabase.from('appuntamenti').select(`
-        id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
+        id, inizio, fine, stato, note,
+        prezzo_proposto, prezzo_confermato, prezzo_confermato_flag, metodo_pagamento,
         clienti(id,nome,cognome),
         animali(id,nome,specie,problemi_carattere,problemi_salute),
         operatori(id,nome,cognome,colore),
@@ -1074,7 +1078,6 @@ export default function CalendarioView() {
     const coloreBase = op?.colore || COLORI_OP[idx % COLORI_OP.length] || '#3b82f6';
     const prezzoOk = a.prezzo_confermato_flag;
     const colore = prezzoOk ? '#6b7280' : coloreBase;
-    // Servizi multipli da appuntamenti_servizi
     const serviziMultipli = (a._serviziMultipli || a.appuntamenti_servizi || [])
       .map(r => r.servizi || r)
       .filter(Boolean);
@@ -1120,7 +1123,6 @@ export default function CalendarioView() {
 
   const handleSaved = (apData) => {
     if (!apData) { fetchAll(); return; }
-    // Aggiorna solo l'evento modificato/aggiunto senza rimontare il calendario
     setOperatori(prev => {
       const ops = prev;
       setEvents(prevEvents => {
@@ -1135,6 +1137,7 @@ export default function CalendarioView() {
       return ops;
     });
   };
+
   const handleDeleted = (id) => {
     setEvents(prev => prev.filter(e => e.id !== id));
   };
@@ -1161,7 +1164,6 @@ export default function CalendarioView() {
           </div>
         </div>
 
-        {/* Selettore vista */}
         <div style={{ ...glassCard, display: 'flex', gap: 3, padding: '5px' }}>
           {Object.entries(VIEW_LABELS).map(([v, label]) => (
             <motion.button
@@ -1181,7 +1183,6 @@ export default function CalendarioView() {
           ))}
         </div>
 
-        {/* Bottone nuovo */}
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}
@@ -1250,7 +1251,6 @@ export default function CalendarioView() {
           }
           .fc .fc-event:hover { filter: brightness(1.08) !important; transform: translateY(-1px) !important; transition: all 0.12s ease !important; }
           .fc .fc-event-main { padding: 0 !important; height: 100% !important; overflow: hidden !important; }
-          /* Nasconde titolo nativo — usiamo eventContent */
           .fc .fc-event-title-container { display: none !important; }
           .fc .fc-event-time { display: none !important; }
           .fc .fc-col-header-cell { font-size: 13px; font-weight: 600; color: var(--text-primary); padding: 8px 0; }
@@ -1298,15 +1298,10 @@ export default function CalendarioView() {
               const servizi = Array.isArray(servizioNome) ? servizioNome : (servizioNome ? [servizioNome] : []);
               return (
                 <div style={{
-                  padding: '3px 6px',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'flex-start',
-                  overflow: 'hidden',
-                  gap: 1,
+                  padding: '3px 6px', height: '100%',
+                  display: 'flex', flexDirection: 'column',
+                  justifyContent: 'flex-start', overflow: 'hidden', gap: 1,
                 }}>
-                  {/* Riga 1: check + animale (grassetto) + operatore */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap', overflow: 'hidden' }}>
                     {prezzoOk && (
                       <div style={{
@@ -1322,10 +1317,7 @@ export default function CalendarioView() {
                       </div>
                     )}
                     {hasAlert && (
-                      <div style={{
-                        fontSize: 11, flexShrink: 0, lineHeight: 1,
-                        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
-                      }}>⚠️</div>
+                      <div style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}>⚠️</div>
                     )}
                     <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                       {animaleNome}
@@ -1336,11 +1328,9 @@ export default function CalendarioView() {
                       </span>
                     )}
                   </div>
-                  {/* Riga 2: orario */}
                   <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.80, whiteSpace: 'nowrap', overflow: 'hidden', lineHeight: 1.2 }}>
                     {timeText}
                   </div>
-                  {/* Righe servizi: primo visibile + "... +N altri" */}
                   {servizi.length > 0 && (
                     <div style={{ fontSize: 10, opacity: 0.78, lineHeight: 1.3 }}>
                       <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

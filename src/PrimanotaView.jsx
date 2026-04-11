@@ -3,6 +3,8 @@
  * Prima nota giornaliera — incassi toelettatura + POS + ECC + uscite/versamenti
  * Tabella: primanota (movimenti manuali) + appuntamenti (prezzo_confermato)
  * npm install jspdf jspdf-autotable xlsx (già installati con StatisticheView)
+ *
+ * REQUISITO DB: ALTER TABLE appuntamenti ADD COLUMN metodo_pagamento TEXT DEFAULT 'contanti';
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -194,7 +196,6 @@ function doExportPDF(righe, dal, al, totali) {
   doc.text(`Periodo: ${dal} — ${al}`, 14, 30);
   doc.setTextColor(30, 30, 30);
 
-  // Riepilogo
   let y = 50;
   doc.setFontSize(11); doc.setFont('helvetica', 'bold');
   doc.text('Riepilogo', 14, y); y += 6;
@@ -216,18 +217,18 @@ function doExportPDF(righe, dal, al, totali) {
   });
   y = doc.lastAutoTable.finalY + 14;
 
-  // Dettaglio
   if (y > 220) { doc.addPage(); y = 20; }
   doc.setFontSize(11); doc.setFont('helvetica', 'bold');
   doc.text('Dettaglio movimenti', 14, y); y += 6;
   autoTable(doc, {
     startY: y,
-    head: [['Data', 'Tipo', 'Descrizione', 'Operatore', 'Importo']],
+    head: [['Data', 'Tipo', 'Descrizione', 'Operatore', 'Pagamento', 'Importo']],
     body: righe.map(r => [
       fmtData(r.data),
       `${TIPI[r.tipo]?.label || r.tipo}`,
       r.descrizione || (r._appId ? `App. ${r._cliente || ''}` : '—'),
       r.operatori?.nome || '—',
+      r.tipo === 'toelettatura' ? (r.metodo_pagamento === 'pos' ? '💳 POS' : '💵 Contanti') : '—',
       (TIPI[r.tipo]?.segno === -1 ? '-' : '+') + ` € ${Number(r.importo).toFixed(2)}`,
     ]),
     theme: 'striped',
@@ -262,12 +263,13 @@ function doExportExcel(righe, dal, al, totali) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(riepilogo), 'Riepilogo');
 
   const dettaglio = [
-    ['Data', 'Tipo', 'Descrizione', 'Operatore', 'Segno', 'Importo'],
+    ['Data', 'Tipo', 'Descrizione', 'Operatore', 'Pagamento', 'Segno', 'Importo'],
     ...righe.map(r => [
       fmtData(r.data),
       TIPI[r.tipo]?.label || r.tipo,
       r.descrizione || (r._appId ? `Appuntamento — ${r._cliente || ''}` : ''),
       r.operatori?.nome || '',
+      r.tipo === 'toelettatura' ? (r.metodo_pagamento === 'pos' ? 'POS' : 'Contanti') : '—',
       TIPI[r.tipo]?.segno === -1 ? 'Uscita' : 'Entrata',
       Number(r.importo) * (TIPI[r.tipo]?.segno || 1),
     ])
@@ -290,13 +292,10 @@ export default function PrimanotaView() {
   const [exporting,   setExporting]   = useState('');
   const [showExport,  setShowExport]  = useState(false);
   const [filtroTipo,  setFiltroTipo]  = useState('tutti');
+  const [metodiPag,   setMetodiPag]   = useState({}); // { [appuntamento_id]: 'contanti' | 'pos' }
 
-  // Export periodo
-  const [expDal,  setExpDal]  = useState(oggi);
-  const [expAl,   setExpAl]   = useState(oggi);
-
-  // Movimenti che si possono segnare come POS (appuntamenti confermati del giorno)
-  const [appSelPOS, setAppSelPOS] = useState(new Set());
+  const [expDal, setExpDal] = useState(oggi);
+  const [expAl,  setExpAl]  = useState(oggi);
 
   useEffect(() => {
     supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome')
@@ -311,17 +310,29 @@ export default function PrimanotaView() {
         .eq('data', dataSel)
         .order('created_at'),
       supabase.from('appuntamenti')
-        .select('id, prezzo_confermato, prezzo_proposto, stato, clienti(nome,cognome), operatori(id,nome,cognome,colore), appuntamenti_servizi(servizi(nome))')
+        .select('id, prezzo_confermato, prezzo_proposto, stato, metodo_pagamento, clienti(nome,cognome), operatori(id,nome,cognome,colore), appuntamenti_servizi(servizi(nome))')
         .eq('prezzo_confermato_flag', true)
         .gte('inizio', dataSel + 'T00:00:00')
         .lte('inizio', dataSel + 'T23:59:59'),
     ]);
     setMovimenti(mov.data || []);
     setAppConf(app.data || []);
+
+    // Inizializza metodiPag dai dati DB
+    const mp = {};
+    (app.data || []).forEach(a => { mp[a.id] = a.metodo_pagamento || 'contanti'; });
+    setMetodiPag(mp);
+
     setLoading(false);
   }, [dataSel]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Aggiorna metodo_pagamento su Supabase
+  const handleMetodoPag = async (appId, metodo) => {
+    setMetodiPag(p => ({ ...p, [appId]: metodo }));
+    await supabase.from('appuntamenti').update({ metodo_pagamento: metodo }).eq('id', appId);
+  };
 
   // Righe toelettatura: dagli appuntamenti confermati
   const righeToelettatura = appConf.map(a => ({
@@ -333,16 +344,14 @@ export default function PrimanotaView() {
     importo: Number(a.prezzo_confermato || a.prezzo_proposto || 0),
     descrizione: (a.appuntamenti_servizi || []).map(r => r.servizi?.nome).filter(Boolean).join(', '),
     operatori: a.operatori,
-    _isPOS: appSelPOS.has(a.id),
+    metodo_pagamento: metodiPag[a.id] || 'contanti',
   }));
 
-  // Tutte le righe per la vista
   const tutteRighe = [
     ...righeToelettatura,
-    ...movimenti.map(m => ({ ...m, _isPOS: false })),
+    ...movimenti.map(m => ({ ...m })),
   ].filter(r => filtroTipo === 'tutti' || r.tipo === filtroTipo);
 
-  // Totali
   const calcolaTotali = (righe) => {
     const perTipo = {};
     let incassi = 0, uscite = 0;
@@ -369,7 +378,7 @@ export default function PrimanotaView() {
       supabase.from('primanota').select('*, operatori(id,nome,cognome)')
         .gte('data', expDal).lte('data', expAl).order('data').order('created_at'),
       supabase.from('appuntamenti')
-        .select('id, prezzo_confermato, prezzo_proposto, stato, clienti(nome,cognome), operatori(id,nome,cognome), appuntamenti_servizi(servizi(nome))')
+        .select('id, prezzo_confermato, prezzo_proposto, stato, metodo_pagamento, clienti(nome,cognome), operatori(id,nome,cognome), appuntamenti_servizi(servizi(nome))')
         .eq('prezzo_confermato_flag', true)
         .gte('inizio', expDal + 'T00:00:00')
         .lte('inizio', expAl + 'T23:59:59'),
@@ -379,6 +388,7 @@ export default function PrimanotaView() {
       importo: Number(a.prezzo_confermato || a.prezzo_proposto || 0),
       descrizione: (a.appuntamenti_servizi || []).map(r => r.servizi?.nome).filter(Boolean).join(', '),
       operatori: a.operatori, _appId: a.id,
+      metodo_pagamento: a.metodo_pagamento || 'contanti',
       _cliente: `${a.clienti?.cognome || ''} ${a.clienti?.nome || ''}`.trim(),
     }));
     const righe = [...righeApp, ...(mov.data || [])].sort((a,b) => a.data.localeCompare(b.data));
@@ -404,13 +414,11 @@ export default function PrimanotaView() {
           </div>
         </div>
 
-        {/* Selettore data */}
         <input type="date" value={dataSel} onChange={e => setDataSel(e.target.value)}
           style={{ ...glassCard, padding: '8px 12px', fontSize: 13, fontWeight: 600,
             color: 'var(--text-primary)', border: '1px solid var(--card-border)',
             fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }} />
 
-        {/* Esporta */}
         <button onClick={() => setShowExport(p => !p)}
           style={{ ...glassCard, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6,
             cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2563eb',
@@ -421,7 +429,6 @@ export default function PrimanotaView() {
           {exporting ? 'Esporto...' : 'Esporta'}
         </button>
 
-        {/* Aggiungi */}
         <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }}
           onClick={() => setShowModal(true)}
           style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -556,6 +563,7 @@ export default function PrimanotaView() {
                 initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
                 style={{ ...glassCard, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+
                 {/* Icona tipo */}
                 <div style={{ width: 40, height: 40, borderRadius: 13, flexShrink: 0,
                   background: t?.bg || 'rgba(37,99,235,0.1)',
@@ -589,6 +597,30 @@ export default function PrimanotaView() {
                     </div>
                   )}
                 </div>
+
+                {/* Toggle POS / Contanti (solo righe toelettatura automatiche) */}
+                {r._appId && (
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {[
+                      { id: 'contanti', label: '💵 Contanti', activeColor: '#059669', activeBg: 'rgba(5,150,105,0.15)', activeBorder: 'rgba(5,150,105,0.4)' },
+                      { id: 'pos',      label: '💳 POS',      activeColor: '#7c3aed', activeBg: 'rgba(124,58,237,0.15)', activeBorder: 'rgba(124,58,237,0.4)' },
+                    ].map(m => {
+                      const attivo = (metodiPag[r._appId] || 'contanti') === m.id;
+                      return (
+                        <button key={m.id} onClick={() => handleMetodoPag(r._appId, m.id)} style={{
+                          padding: '4px 9px', borderRadius: 9, cursor: 'pointer',
+                          fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                          border: `1px solid ${attivo ? m.activeBorder : 'var(--card-border)'}`,
+                          background: attivo ? m.activeBg : 'transparent',
+                          color: attivo ? m.activeColor : 'var(--text-muted)',
+                          transition: 'all 0.15s',
+                        }}>
+                          {m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Importo */}
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
