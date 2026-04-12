@@ -317,16 +317,16 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
           </div>
         )}
 
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-          <div>
-            <div style={secLabel}>Data di nascita</div>
-            <input type="date" value={f.data_nascita} onChange={e=>set('data_nascita',e.target.value)} style={inputStyle}/>
-          </div>
-          <div>
-            <div style={secLabel}>Colore mantello</div>
-            <input type="text" placeholder="Es. nero, bianco..." value={f.colore} onChange={e=>set('colore',e.target.value)} style={inputStyle}/>
-          </div>
-        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:14}}>
+  <div>
+    <div style={secLabel}>Data di nascita</div>
+    <input type="date" value={f.data_nascita} onChange={e=>set('data_nascita',e.target.value)} style={inputStyle}/>
+  </div>
+  <div>
+    <div style={secLabel}>Colore mantello</div>
+    <input type="text" placeholder="Es. nero, bianco..." value={f.colore} onChange={e=>set('colore',e.target.value)} style={inputStyle}/>
+  </div>
+</div>
 
         <div style={{marginBottom:14}}>
           <div style={secLabel}>Note iniziali</div>
