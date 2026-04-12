@@ -7,7 +7,7 @@ import Dexie from 'dexie';
 
 export const db = new Dexie('PetCareDB');
 
-db.version(1).stores({
+db.version(2).stores({
   // Tabelle dati
   clienti:      'id, cognome, nome, created_at',
   animali:      'id, cliente_id, nome, specie',
@@ -15,6 +15,8 @@ db.version(1).stores({
   servizi:      'id, nome',
   razze:        'id, nome, specie',
   appuntamenti: 'id, inizio, fine, stato, cliente_id, animale_id, operatore_id',
+  primanota:    'id, data, appuntamento_id, operatore_id, tipo',
+  appuntamenti_servizi: 'id, appuntamento_id, servizio_id',
 
   // Coda mutazioni offline
   // action: 'insert' | 'update' | 'delete'

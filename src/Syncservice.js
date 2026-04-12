@@ -12,7 +12,7 @@ import { supabase } from './supabaseClient';
 import { db } from './db';
 
 // ── Tabelle da sincronizzare ──────────────────────────────────
-const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti'];
+const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi'];
 
 // ── Stato connessione ─────────────────────────────────────────
 let isOnline = navigator.onLine;
@@ -50,14 +50,26 @@ export async function syncAll() {
 
   // 2. Scarica i dati freschi da Supabase
   await Promise.all([
-    syncTabella('clienti',      '*'),
-    syncTabella('animali',      '*, razze(id,nome)'),
-    syncTabella('operatori',    '*'),
-    syncTabella('servizi',      '*'),
-    syncTabella('razze',        '*'),
-    syncTabella('appuntamenti', '*, clienti(nome,cognome), animali(nome,specie), operatori(id,nome,cognome,colore), servizi(id,nome,prezzo)'),
+    syncTabella('clienti', '*'),
+    syncTabella('operatori', '*'),
+    syncTabella('servizi', '*'),
+    syncTabella('razze', '*'),
+    syncTabella('primanota', '*'),
+    syncTabella('appuntamenti_servizi', '*'),
+    // Query complesse con join per mostrare i nomi anche offline
+    syncTabella('animali', `
+      *,
+      razze(id, nome),
+      clienti(id, nome, cognome)
+    `),
+    syncTabella('appuntamenti', `
+      *,
+      clienti(nome, cognome),
+      animali(nome, specie),
+      operatori(id, nome, cognome, colore)
+    `),
   ]);
-
+  
   // 3. Aggiorna timestamp ultimo sync
   await db._sync.put({ chiave: 'ultimo_sync', valore: new Date().toISOString() });
   console.log('[PetCare Sync] Completato');
