@@ -304,6 +304,7 @@ function PlaceholderView({ title, description }) {
 export default function App() {
   const [active, setActive] = useState("home");
   const [navHidden, setNavHidden] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleNav = (id) => {
     setActive(id);
@@ -424,7 +425,36 @@ export default function App() {
           z-index: 20;
           backdrop-filter: blur(40px) saturate(1.8);
           -webkit-backdrop-filter: blur(40px) saturate(1.8);
+          transition: width 0.3s cubic-bezier(0.4,0,0.2,1), padding 0.3s cubic-bezier(0.4,0,0.2,1);
+          overflow: hidden;
         }
+        .sidebar.collapsed {
+          width: 68px;
+          padding: 28px 10px 24px;
+        }
+        .sidebar.collapsed .sidebar-label { display: none; }
+        .sidebar.collapsed .sidebar-logo span { display: none; }
+        .sidebar.collapsed .sidebar-item { justify-content: center; gap: 0; padding: 13px 0; }
+        .sidebar-toggle {
+          display: none;
+          position: fixed;
+          top: 20px;
+          left: 258px;
+          z-index: 30;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          cursor: pointer;
+          border: 1px solid rgba(255,255,255,0.7);
+          background: rgba(210,228,255,0.85);
+          backdrop-filter: blur(10px);
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 8px rgba(60,100,200,0.2);
+          transition: left 0.3s cubic-bezier(0.4,0,0.2,1);
+          font-family: inherit;
+        }
+        .sidebar-toggle.collapsed { left: 78px; }
         .sidebar-logo {
           display: flex;
           align-items: center;
@@ -446,20 +476,22 @@ export default function App() {
         .sidebar-item {
           display: flex;
           align-items: center;
-          gap: 11px;
-          padding: 11px 13px;
+          gap: 13px;
+          padding: 13px 14px;
           border-radius: 14px;
           cursor: pointer;
           border: 1px solid transparent;
           background: transparent;
           width: 100%;
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 500;
           text-align: left;
           transition: all 0.2s;
           font-family: inherit;
+          white-space: nowrap;
+          overflow: hidden;
         }
-        .sidebar-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .sidebar-item svg { width: 22px; height: 22px; flex-shrink: 0; }
         .main {
           flex: 1;
           padding: 28px 22px 110px;
@@ -504,9 +536,11 @@ export default function App() {
         .nav-item span { font-size: 10px; font-weight: 600; letter-spacing: 0.1px; }
         @media (min-width: 640px) {
           .sidebar { display: flex; }
+          .sidebar-toggle { display: flex; }
           .bottom-nav { display: none; }
           .nav-toggle { display: none !important; }
-          .main { margin-left: 240px; padding: 32px 36px 36px; }
+          .main { margin-left: 240px; padding: 32px 36px 36px; transition: margin-left 0.3s cubic-bezier(0.4,0,0.2,1); }
+          .main.sidebar-collapsed { margin-left: 68px; }
           .main.nav-hidden { padding: 32px 36px 36px; }
         }
 
@@ -521,7 +555,7 @@ export default function App() {
 
       <div className="app-layout">
         {/* Sidebar */}
-        <nav className="sidebar">
+        <nav className={"sidebar" + (sidebarCollapsed ? " collapsed" : "")}>
           <div className="sidebar-logo">
             <div className="logo-icon">N</div>
             <span>Nemora</span>
@@ -531,18 +565,33 @@ export default function App() {
               key={item.id}
               className={"sidebar-item" + (active === item.id ? " active" : "")}
               onClick={() => handleNav(item.id)}
-              whileHover={{ x: 3 }}
+              whileHover={{ x: sidebarCollapsed ? 0 : 3 }}
               whileTap={{ scale: 0.97 }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              title={sidebarCollapsed ? item.label : undefined}
             >
               {item.icon}
-              {item.label}
+              <span className="sidebar-label">{item.label}</span>
             </motion.button>
           ))}
         </nav>
 
+        {/* Sidebar toggle button */}
+        <button
+          className={"sidebar-toggle" + (sidebarCollapsed ? " collapsed" : "")}
+          onClick={() => setSidebarCollapsed(c => !c)}
+          title={sidebarCollapsed ? "Espandi menu" : "Comprimi menu"}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {sidebarCollapsed
+              ? <path d="M9 18l6-6-6-6"/>
+              : <path d="M15 18l-6-6 6-6"/>
+            }
+          </svg>
+        </button>
+
         {/* Main — AnimatePresence per transizioni tra pagine */}
-        <main className={"main" + (navHidden ? " nav-hidden" : "")}>
+        <main className={"main" + (navHidden ? " nav-hidden" : "") + (sidebarCollapsed ? " sidebar-collapsed" : "")}>
           <AnimatePresence mode="sync">
             <motion.div
               key={active}

@@ -398,12 +398,14 @@ export default function StatisticheView() {
   const [animali,      setAnimali]      = useState([]);
   const [operatori,    setOperatori]    = useState([]);
   const [servizi,      setServizi]      = useState([]);
+  const [primanota,    setPrimanota]    = useState([]);
+  const [apConf,       setApConf]       = useState([]);
 
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
     setLoading(true);
-    const [ap, cl, an, op, sv] = await Promise.all([
+    const [ap, cl, an, op, sv, pn, apC] = await Promise.all([
       supabase.from('appuntamenti').select(`
         id, inizio, fine, stato,
         clienti(id, nome, cognome),
@@ -416,12 +418,19 @@ export default function StatisticheView() {
       supabase.from('animali').select('id, nome, specie, razza_id, colore, data_nascita, zone_critiche, note, operatore_preferito_id, created_at, razze(nome), clienti(nome, cognome)'), 
       supabase.from('operatori').select('id, nome, cognome, colore').eq('attivo', true),
       supabase.from('servizi').select('id, nome, prezzo, durata_minuti'),
+      supabase.from('primanota').select('id, data, tipo, importo, descrizione, operatore_id').order('data'),
+      supabase.from('appuntamenti')
+        .select('id, inizio, prezzo_confermato, prezzo_proposto, metodo_pagamento')
+        .eq('prezzo_confermato_flag', true)
+        .order('inizio'),
     ]);
     setAppuntamenti(ap.data || []);
     setClienti(cl.data || []);
     setAnimali(an.data || []);
     setOperatori(op.data || []);
     setServizi(sv.data || []);
+    setPrimanota(pn.data || []);
+    setApConf(apC.data || []);
     setLoading(false);
   };
 
@@ -539,6 +548,63 @@ export default function StatisticheView() {
   const maxRazza = Math.max(...razzeTop.map(r => r.count), 1);
 
   const meseLabel = `${MESI_SHORT[meseSel]} ${annoSel}`;
+
+  // ── Dati Prima Nota ──────────────────────────────────────────
+  // Calcola incassi prima nota per un dato mese/anno
+  const calcolaPrimaNotaMese = (m, y) => {
+    const pnMese = primanota.filter(r => {
+      const d = new Date(r.data);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+    const apMeseConf = apConf.filter(a => {
+      const d = new Date(a.inizio);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+
+    let contanti = 0, pos = 0, ecc = 0, uscite = 0, versamenti = 0;
+    // Toelettatura dagli appuntamenti confermati
+    apMeseConf.forEach(a => {
+      const imp = Number(a.prezzo_confermato || a.prezzo_proposto || 0);
+      if (a.metodo_pagamento === 'pos') pos += imp;
+      else contanti += imp;
+    });
+    // Movimenti manuali prima nota
+    pnMese.forEach(r => {
+      const imp = Number(r.importo || 0);
+      if (r.tipo === 'pos')        pos += imp;
+      else if (r.tipo === 'ecc')   ecc += imp;
+      else if (r.tipo === 'uscita')     uscite += imp;
+      else if (r.tipo === 'versamento') versamenti += imp;
+    });
+    return {
+      contanti: Math.round(contanti),
+      pos:      Math.round(pos),
+      ecc:      Math.round(ecc),
+      uscite:   Math.round(uscite),
+      versamenti: Math.round(versamenti),
+      incassi:  Math.round(contanti + pos + ecc),
+      netto:    Math.round(contanti + pos + ecc - uscite - versamenti),
+      cassa:    Math.round(contanti + ecc - uscite - versamenti),
+    };
+  };
+
+  const pnMeseCorrente = calcolaPrimaNotaMese(meseSel, annoSel);
+
+  // Trend 6 mesi prima nota
+  const trend6PrimaNote = Array.from({ length: 6 }, (_, i) => {
+    let m = meseSel - 5 + i;
+    let y = annoSel;
+    if (m < 0) { m += 12; y -= 1; }
+    const dati = calcolaPrimaNotaMese(m, y);
+    return { mese: MESI_SHORT[m], ...dati };
+  });
+
+  // Composizione incassi del mese per tipo
+  const pieIncassi = [
+    { name: 'Contanti', value: pnMeseCorrente.contanti, color: C.blue },
+    { name: 'POS',      value: pnMeseCorrente.pos,      color: C.purple },
+    { name: 'ECC',      value: pnMeseCorrente.ecc,      color: C.cyan },
+  ].filter(p => p.value > 0);
 
   // Dati per export
   const datiExport = {
@@ -806,6 +872,106 @@ export default function StatisticheView() {
               activeDot={{ r: 6, fill: C.green }} />
           </LineChart>
         </ResponsiveContainer>
+      </motion.div>
+
+      {/* ── PRIMA NOTA: KPI MESE ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+        style={{ ...glass, padding: '22px 24px', marginBottom: 14 }}
+      >
+        <div style={secLabel}>Prima Nota — {meseLabel}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, marginBottom: 16 }}>
+          {[
+            { label: 'Incassi totali',    value: pnMeseCorrente.incassi,    color: C.green,  icon: '💰' },
+            { label: 'Netto (dopo uscite)', value: pnMeseCorrente.netto,   color: C.blue,   icon: '📊' },
+            { label: 'Uscite / versamenti', value: pnMeseCorrente.uscite + pnMeseCorrente.versamenti, color: C.red, icon: '💸' },
+            { label: 'Cassa contante',    value: pnMeseCorrente.cassa,      color: C.orange, icon: '🏦' },
+          ].map(s => (
+            <div key={s.label} style={{ ...glassCard, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 22 }}>{s.icon}</span>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: s.color, letterSpacing: '-0.5px' }}>
+                  € {s.value.toLocaleString('it-IT')}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginTop: 2 }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Composizione incassi: barre orizzontali */}
+        {pieIncassi.length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>
+              Composizione incassi
+            </div>
+            {pieIncassi.map(p => (
+              <BarraOrizzontale
+                key={p.name}
+                label={p.name}
+                value={p.value}
+                max={pnMeseCorrente.incassi}
+                color={p.color}
+                extra={`€ ${p.value.toLocaleString('it-IT')} · ${pnMeseCorrente.incassi > 0 ? Math.round(p.value / pnMeseCorrente.incassi * 100) : 0}%`}
+              />
+            ))}
+          </div>
+        )}
+      </motion.div>
+
+      {/* ── PRIMA NOTA: TREND 6 MESI ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        style={{ ...glass, padding: '22px 24px', marginBottom: 14 }}
+      >
+        <div style={secLabel}>Incassi Prima Nota — ultimi 6 mesi</div>
+        <ResponsiveContainer width="100%" height={210}>
+          <BarChart data={trend6PrimaNote} barGap={2} barSize={16}>
+            <XAxis dataKey="mese" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={44}
+              tickFormatter={v => `€${v}`} />
+            <Tooltip content={<Tip />} formatter={(v, name) => [`€ ${v}`, name]} />
+            <Bar dataKey="contanti"   name="Contanti"  fill={C.blue}   radius={[4,4,0,0]} />
+            <Bar dataKey="pos"        name="POS"        fill={C.purple} radius={[4,4,0,0]} />
+            <Bar dataKey="ecc"        name="ECC"        fill={C.cyan}   radius={[4,4,0,0]} />
+            <Bar dataKey="uscite"     name="Uscite"     fill={C.red}    radius={[4,4,0,0]} fillOpacity={0.6} />
+          </BarChart>
+        </ResponsiveContainer>
+        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+          {[
+            { c: C.blue,   l: 'Contanti' },
+            { c: C.purple, l: 'POS' },
+            { c: C.cyan,   l: 'ECC' },
+            { c: C.red,    l: 'Uscite', op: 0.6 },
+          ].map(({ c, l, op }) => (
+            <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+              <div style={{ width: 10, height: 10, borderRadius: 3, background: c, opacity: op || 1 }} />
+              {l}
+            </div>
+          ))}
+        </div>
+
+        {/* LineChart netto sovrapposto */}
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+            Netto mensile (incassi − uscite)
+          </div>
+          <ResponsiveContainer width="100%" height={130}>
+            <LineChart data={trend6PrimaNote}>
+              <XAxis dataKey="mese" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={44}
+                tickFormatter={v => `€${v}`} />
+              <Tooltip content={<Tip />} formatter={v => [`€ ${v}`, 'Netto']} />
+              <Line type="monotone" dataKey="netto" stroke={C.green} strokeWidth={2.5}
+                dot={{ fill: C.green, r: 4, strokeWidth: 0 }}
+                activeDot={{ r: 6, fill: C.green }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </motion.div>
 
       {/* ── OPERATORI ── */}
