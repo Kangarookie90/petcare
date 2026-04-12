@@ -59,7 +59,7 @@ const secLabel = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// MODAL NUOVO CLIENTE (inline nel form appuntamento)
+// MODAL NUOVO CLIENTE
 // ─────────────────────────────────────────────────────────────
 function FormNuovoCliente({ onSaved, onCancel }) {
   const [f, setF] = useState({ nome: '', cognome: '', telefono: '', email: '' });
@@ -116,7 +116,7 @@ function FormNuovoCliente({ onSaved, onCancel }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// MODAL NUOVO ANIMALE (inline nel form appuntamento)
+// MODAL NUOVO ANIMALE
 // ─────────────────────────────────────────────────────────────
 function FormNuovoAnimale({ clienteId, razze, onSaved, onCancel }) {
   const [f, setF] = useState({ nome: '', specie: 'cane', razza_id: '' });
@@ -282,7 +282,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     prezzo_proposto:        appuntamento?.prezzo_proposto || '',
     prezzo_confermato:      appuntamento?.prezzo_confermato || '',
     prezzo_confermato_flag: appuntamento?.prezzo_confermato_flag || false,
-    metodo_pagamento:       appuntamento?.metodo_pagamento || 'contanti', // ← NUOVO
+    metodo_pagamento:       appuntamento?.metodo_pagamento || 'contanti',
   });
   const [loading, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -308,8 +308,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       setServizi(sv.data || []);
       setRazze(rz.data || []);
       if (apSv?.data?.length > 0) {
-        const ids = apSv.data.map(r => r.servizio_id);
-        set('servizi_ids', ids);
+        set('servizi_ids', apSv.data.map(r => r.servizio_id));
       }
       setServiziCaricati(true);
       supabase.from('animali')
@@ -369,24 +368,24 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       const fine   = new Date(inizio.getTime() + f.durata_minuti * 60000);
 
       const payload = {
-        cliente_id:    f.blocco_orario ? null : f.cliente_id,
-        animale_id:    f.blocco_orario ? null : f.animale_id,
-        operatore_id:  f.operatore_id,
-        servizio_id:   f.servizi_ids[0] || null,
-        inizio:        inizio.toISOString(),
-        fine:          fine.toISOString(),
-        note:          f.note.trim() || null,
-        stato:         f.stato,
+        cliente_id:             f.blocco_orario ? null : f.cliente_id,
+        animale_id:             f.blocco_orario ? null : f.animale_id,
+        operatore_id:           f.operatore_id,
+        servizio_id:            f.servizi_ids[0] || null,
+        inizio:                 inizio.toISOString(),
+        fine:                   fine.toISOString(),
+        note:                   f.note.trim() || null,
+        stato:                  f.stato,
         prezzo_proposto:        f.prezzo_proposto !== '' ? Number(f.prezzo_proposto) : null,
         prezzo_confermato:      f.prezzo_confermato !== '' ? Number(f.prezzo_confermato) : null,
         prezzo_confermato_flag: f.prezzo_confermato_flag,
-        metodo_pagamento:       f.metodo_pagamento, // ← NUOVO
+        metodo_pagamento:       f.metodo_pagamento,
       };
 
       const SELECT = `
         id, inizio, fine, stato, note, prezzo_proposto, prezzo_confermato, prezzo_confermato_flag, metodo_pagamento,
-        clienti(id,nome,cognome), 
-        animali(id,nome,specie,problemi_carattere,problemi_salute), 
+        clienti(id,nome,cognome),
+        animali(id,nome,specie,problemi_carattere,problemi_salute),
         operatori(id,nome,cognome,colore)
       `;
 
@@ -397,33 +396,22 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         result = await supabase.from('appuntamenti').insert([payload]).select(SELECT).single();
       }
 
-      if (result.error) {
-        setError(result.error.message);
-        setSaving(false);
-        return;
-      }
+      if (result.error) { setError(result.error.message); setSaving(false); return; }
 
       const apId = result.data.id;
-
       await supabase.from('appuntamenti_servizi').delete().eq('appuntamento_id', apId);
       if (f.servizi_ids.length > 0) {
         const righeServizi = f.servizi_ids.map(sid => {
           const sv = servizi.find(x => x.id === sid);
-          return {
-            appuntamento_id:  apId,
-            servizio_id:      sid,
-            prezzo_applicato: sv?.prezzo || null,
-          };
+          return { appuntamento_id: apId, servizio_id: sid, prezzo_applicato: sv?.prezzo || null };
         });
-        const { error: svErr } = await supabase.from('appuntamenti_servizi').insert(righeServizi);
-        if (svErr) console.error('[CalendarioView] errore salvataggio servizi:', svErr);
+        await supabase.from('appuntamenti_servizi').insert(righeServizi);
       }
 
       const serviziAssociati = f.servizi_ids.map(sid => servizi.find(x => x.id === sid)).filter(Boolean);
       onSaved({ ...result.data, _serviziMultipli: serviziAssociati });
       onClose();
     } catch (err) {
-      console.error('[CalendarioView] save error:', err);
       setError('Errore durante il salvataggio: ' + (err.message || 'riprova'));
     } finally {
       setSaving(false);
@@ -444,52 +432,32 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     if (!f.animale_id || isEdit) return;
     const a = [...animali, ...tuttiAnimali].find(x => x.id === f.animale_id);
     if (!a) return;
-    if (a.servizi_riservati_ids?.length > 0) {
-      set('servizi_ids', a.servizi_riservati_ids);
-      set('durata_auto', true);
-    }
-    if (a.durata_riservata) {
-      set('durata_minuti', a.durata_riservata);
-      set('durata_auto', false);
-    }
+    if (a.servizi_riservati_ids?.length > 0) { set('servizi_ids', a.servizi_riservati_ids); set('durata_auto', true); }
+    if (a.durata_riservata) { set('durata_minuti', a.durata_riservata); set('durata_auto', false); }
   }, [f.animale_id, animali]);
 
   useEffect(() => {
     if (!f.cliente_id || !clienti.length) return;
     if (isEdit && f.prezzo_proposto !== '') return;
     const c = clienti.find(x => x.id === f.cliente_id);
-    if (c?.prezzo_riservato) {
-      set('prezzo_proposto', String(c.prezzo_riservato));
-    }
+    if (c?.prezzo_riservato) set('prezzo_proposto', String(c.prezzo_riservato));
   }, [f.cliente_id, clienti]);
 
   useEffect(() => {
     if (f.servizi_ids.length === 0) return;
     if (isEdit && f.prezzo_proposto !== '' && !serviziCaricati) return;
     const cliente = clienti.find(x => x.id === f.cliente_id);
-    if (cliente?.prezzo_riservato) {
-      set('prezzo_proposto', String(cliente.prezzo_riservato));
-      return;
-    }
-    const tot = f.servizi_ids.reduce((acc, sid) => {
-      const s = servizi.find(x => x.id === sid);
-      return acc + Number(s?.prezzo || 0);
-    }, 0);
+    if (cliente?.prezzo_riservato) { set('prezzo_proposto', String(cliente.prezzo_riservato)); return; }
+    const tot = f.servizi_ids.reduce((acc, sid) => acc + Number(servizi.find(x => x.id === sid)?.prezzo || 0), 0);
     if (tot > 0) set('prezzo_proposto', String(tot));
   }, [f.servizi_ids, servizi]);
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        background: 'rgba(10,24,64,0.45)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 20,
-      }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(10,24,64,0.45)',
+        backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', padding: 20 }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <motion.div
@@ -504,11 +472,9 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
             {isEdit ? 'Modifica appuntamento' : 'Nuovo appuntamento'}
           </div>
-          <button onClick={onClose} style={{
-            background: 'var(--card-bg-sm)', border: '1px solid var(--card-border)',
-            borderRadius: 10, width: 32, height: 32, cursor: 'pointer',
-            fontSize: 18, color: 'var(--text-secondary)', fontFamily: 'inherit',
-          }}>×</button>
+          <button onClick={onClose} style={{ background: 'var(--card-bg-sm)', border: '1px solid var(--card-border)',
+            borderRadius: 10, width: 32, height: 32, cursor: 'pointer', fontSize: 18,
+            color: 'var(--text-secondary)', fontFamily: 'inherit' }}>×</button>
         </div>
 
         {/* Data e ora */}
@@ -532,18 +498,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                 flex: 1, padding: '7px 4px', borderRadius: 10, cursor: 'pointer',
                 fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
                 border: '1px solid var(--card-border)',
-                background: f.stato === s ? ({
-                  confermato: 'rgba(37,99,235,0.15)',
-                  'in attesa': 'rgba(217,119,6,0.15)',
-                  completato: 'rgba(5,150,105,0.15)',
-                  cancellato: 'rgba(220,38,38,0.15)',
-                }[s]) : 'transparent',
-                color: f.stato === s ? ({
-                  confermato: '#2563eb',
-                  'in attesa': '#d97706',
-                  completato: '#059669',
-                  cancellato: '#dc2626',
-                }[s]) : 'var(--text-muted)',
+                background: f.stato === s ? ({ confermato:'rgba(37,99,235,0.15)', 'in attesa':'rgba(217,119,6,0.15)', completato:'rgba(5,150,105,0.15)', cancellato:'rgba(220,38,38,0.15)' }[s]) : 'transparent',
+                color: f.stato === s ? ({ confermato:'#2563eb', 'in attesa':'#d97706', completato:'#059669', cancellato:'#dc2626' }[s]) : 'var(--text-muted)',
               }}>
                 {s.charAt(0).toUpperCase() + s.slice(1)}
               </button>
@@ -551,32 +507,22 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           </div>
         </div>
 
-        {/* Toggle blocco orario */}
+        {/* Blocco orario */}
         <div style={{ marginBottom: 16 }}>
-          <button
-            onClick={() => set('blocco_orario', !f.blocco_orario)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-              padding: '11px 14px', borderRadius: 12, cursor: 'pointer',
-              fontFamily: 'inherit', textAlign: 'left',
-              border: `1px solid ${f.blocco_orario ? 'rgba(220,38,38,0.3)' : 'var(--card-border)'}`,
-              background: f.blocco_orario ? 'rgba(220,38,38,0.08)' : 'var(--card-bg-sm)',
-            }}
-          >
-            <div style={{
-              width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+          <button onClick={() => set('blocco_orario', !f.blocco_orario)} style={{
+            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+            padding: '11px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+            border: `1px solid ${f.blocco_orario ? 'rgba(220,38,38,0.3)' : 'var(--card-border)'}`,
+            background: f.blocco_orario ? 'rgba(220,38,38,0.08)' : 'var(--card-bg-sm)',
+          }}>
+            <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
               background: f.blocco_orario ? '#dc2626' : 'var(--card-border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
+              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {f.blocco_orario && <span style={{ fontSize: 11, color: '#fff', lineHeight: 1 }}>✓</span>}
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: f.blocco_orario ? '#dc2626' : 'var(--text-primary)' }}>
-                Blocca orario
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-                Riserva lo slot senza associare un cliente
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: f.blocco_orario ? '#dc2626' : 'var(--text-primary)' }}>Blocca orario</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>Riserva lo slot senza associare un cliente</div>
             </div>
           </button>
         </div>
@@ -600,31 +546,16 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         {!f.blocco_orario && searchMode === 'animale' && !f.cliente_id && (
           <div style={{ marginBottom: 14 }}>
             <div style={secLabel}>Cerca animale *</div>
-            <input
-              placeholder="Nome animale..."
-              value={cercaAnimaleQuery}
-              onChange={e => setCercaAnimaleQuery(e.target.value)}
-              style={inputStyle}
-              autoComplete="off"
-            />
+            <input placeholder="Nome animale..." value={cercaAnimaleQuery}
+              onChange={e => setCercaAnimaleQuery(e.target.value)} style={inputStyle} autoComplete="off" />
             {cercaAnimaleQuery.length > 1 && (() => {
-              const filtrati = tuttiAnimali.filter(a =>
-                a.nome.toLowerCase().includes(cercaAnimaleQuery.toLowerCase())
-              ).slice(0, 15);
+              const filtrati = tuttiAnimali.filter(a => a.nome.toLowerCase().includes(cercaAnimaleQuery.toLowerCase())).slice(0, 15);
               return filtrati.length > 0 ? (
                 <div style={{ ...glassCard, marginTop: 4, maxHeight: 200, overflowY: 'auto' }}>
                   {filtrati.map(a => (
-                    <button key={a.id} onMouseDown={e => {
-                      e.preventDefault();
-                      set('cliente_id', a.cliente_id);
-                      set('animale_id', a.id);
-                      setCercaAnimaleQuery('');
-                    }} style={{
-                      display: 'block', width: '100%', padding: '10px 14px',
-                      background: 'none', border: 'none',
-                      borderBottom: '1px solid var(--card-border-sm)',
-                      cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
-                    }}>
+                    <button key={a.id} onMouseDown={e => { e.preventDefault(); set('cliente_id', a.cliente_id); set('animale_id', a.id); setCercaAnimaleQuery(''); }}
+                      style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none',
+                        borderBottom: '1px solid var(--card-border-sm)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display:'flex', alignItems:'center', gap:6 }}>
                         <span>{a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}</span>
                         {(a.problemi_salute || a.problemi_carattere) && <span>⚠️</span>}
@@ -632,85 +563,64 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                           <span style={{ fontSize: 10, background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderRadius: 6, padding: '1px 5px', fontWeight: 700 }}>★</span>
                         )}
                       </div>
-                      {a.clienti && (
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          {a.clienti.cognome} {a.clienti.nome}
-                        </div>
-                      )}
+                      {a.clienti && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.clienti.cognome} {a.clienti.nome}</div>}
                     </button>
                   ))}
                 </div>
-              ) : (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>
-                  Nessun animale trovato
-                </div>
-              );
+              ) : <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>Nessun animale trovato</div>;
             })()}
           </div>
         )}
 
         {/* Ricerca cliente */}
-        {!f.blocco_orario && (searchMode === 'cliente' || f.cliente_id) && <div style={{ marginBottom: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={secLabel}>Cliente *</div>
-            {!showNuovoCliente && (
-              <button onClick={() => setShowNuovoCliente(true)} style={{
-                fontSize: 11, fontWeight: 600, color: '#2563eb', background: 'rgba(37,99,235,0.1)',
-                border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit',
-              }}>+ Nuovo cliente</button>
-            )}
-          </div>
-
-          {clienteSelezionato ? (
-            <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {clienteSelezionato.cognome} {clienteSelezionato.nome}
-                </div>
-                {clienteSelezionato.telefono && (
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{clienteSelezionato.telefono}</div>
-                )}
-              </div>
-              <button onClick={() => { set('cliente_id', ''); set('animale_id', ''); setCercaCliente(''); setSearchMode('cliente'); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)' }}>×</button>
-            </div>
-          ) : (
-            <>
-              <input
-                placeholder="Cerca per nome o telefono..."
-                value={cercaCliente}
-                onChange={e => setCercaCliente(e.target.value)}
-                style={inputStyle}
-              />
-              {cercaCliente && clientiFiltrati.length > 0 && (
-                <div style={{ ...glassCard, marginTop: 4, maxHeight: 160, overflowY: 'auto' }}>
-                  {clientiFiltrati.slice(0, 5).map(c => (
-                    <button key={c.id} onClick={() => { set('cliente_id', c.id); setCercaCliente(''); }}
-                      style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none',
-                        border: 'none', borderBottom: '1px solid var(--card-border)', cursor: 'pointer',
-                        textAlign: 'left', fontFamily: 'inherit' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{c.cognome} {c.nome}</div>
-                      {c.telefono && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{c.telefono}</div>}
-                    </button>
-                  ))}
-                </div>
+        {!f.blocco_orario && (searchMode === 'cliente' || f.cliente_id) && (
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={secLabel}>Cliente *</div>
+              {!showNuovoCliente && (
+                <button onClick={() => setShowNuovoCliente(true)} style={{ fontSize: 11, fontWeight: 600, color: '#2563eb',
+                  background: 'rgba(37,99,235,0.1)', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  + Nuovo cliente
+                </button>
               )}
-            </>
-          )}
-
-          <AnimatePresence>
-            {showNuovoCliente && (
-              <FormNuovoCliente
-                onSaved={(c) => {
-                  setClienti(prev => [...prev, c].sort((a,b) => a.cognome.localeCompare(b.cognome)));
-                  set('cliente_id', c.id);
-                  setShowNuovoCliente(false);
-                }}
-                onCancel={() => setShowNuovoCliente(false)}
-              />
+            </div>
+            {clienteSelezionato ? (
+              <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{clienteSelezionato.cognome} {clienteSelezionato.nome}</div>
+                  {clienteSelezionato.telefono && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{clienteSelezionato.telefono}</div>}
+                </div>
+                <button onClick={() => { set('cliente_id', ''); set('animale_id', ''); setCercaCliente(''); setSearchMode('cliente'); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)' }}>×</button>
+              </div>
+            ) : (
+              <>
+                <input placeholder="Cerca per nome o telefono..." value={cercaCliente}
+                  onChange={e => setCercaCliente(e.target.value)} style={inputStyle} />
+                {cercaCliente && clientiFiltrati.length > 0 && (
+                  <div style={{ ...glassCard, marginTop: 4, maxHeight: 160, overflowY: 'auto' }}>
+                    {clientiFiltrati.slice(0, 5).map(c => (
+                      <button key={c.id} onClick={() => { set('cliente_id', c.id); setCercaCliente(''); }}
+                        style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none',
+                          border: 'none', borderBottom: '1px solid var(--card-border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{c.cognome} {c.nome}</div>
+                        {c.telefono && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{c.telefono}</div>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
-          </AnimatePresence>
-        </div>}
+            <AnimatePresence>
+              {showNuovoCliente && (
+                <FormNuovoCliente
+                  onSaved={(c) => { setClienti(prev => [...prev, c].sort((a,b) => a.cognome.localeCompare(b.cognome))); set('cliente_id', c.id); setShowNuovoCliente(false); }}
+                  onCancel={() => setShowNuovoCliente(false)}
+                />
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         {/* Selezione animale */}
         {!f.blocco_orario && f.cliente_id && (
@@ -718,48 +628,38 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={secLabel}>Animale *</div>
               {!showNuovoAnimale && (
-                <button onClick={() => setShowNuovoAnimale(true)} style={{
-                  fontSize: 11, fontWeight: 600, color: '#059669', background: 'rgba(5,150,105,0.1)',
-                  border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit',
-                }}>+ Nuovo animale</button>
+                <button onClick={() => setShowNuovoAnimale(true)} style={{ fontSize: 11, fontWeight: 600, color: '#059669',
+                  background: 'rgba(5,150,105,0.1)', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  + Nuovo animale
+                </button>
               )}
             </div>
-            {animali.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>
-                Nessun animale per questo cliente
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {animali.map(a => (
-                  <button key={a.id} onClick={() => set('animale_id', a.id)} style={{
-                    padding: '8px 14px', borderRadius: 12, cursor: 'pointer',
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-                    border: '1px solid var(--card-border)',
-                    background: f.animale_id === a.id ? 'rgba(37,99,235,0.15)' : 'var(--card-bg-sm)',
-                    color: f.animale_id === a.id ? '#2563eb' : 'var(--text-primary)',
-                    boxShadow: f.animale_id === a.id ? '0 2px 0 rgba(255,255,255,0.9) inset' : 'none',
-                  }}>
-                    {a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}
-                    {a.razze?.nome && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>({a.razze.nome})</span>}
-                    {(a.servizi_riservati_ids?.length > 0 || a.durata_riservata) && (
-                      <span style={{ fontSize: 10, background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderRadius: 6, padding: '1px 5px', fontWeight: 700 }}>★</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            {animali.length === 0
+              ? <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>Nessun animale per questo cliente</div>
+              : (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {animali.map(a => (
+                    <button key={a.id} onClick={() => set('animale_id', a.id)} style={{
+                      padding: '8px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                      border: '1px solid var(--card-border)',
+                      background: f.animale_id === a.id ? 'rgba(37,99,235,0.15)' : 'var(--card-bg-sm)',
+                      color: f.animale_id === a.id ? '#2563eb' : 'var(--text-primary)',
+                      boxShadow: f.animale_id === a.id ? '0 2px 0 rgba(255,255,255,0.9) inset' : 'none',
+                    }}>
+                      {a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}
+                      {a.razze?.nome && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>({a.razze.nome})</span>}
+                      {(a.servizi_riservati_ids?.length > 0 || a.durata_riservata) && (
+                        <span style={{ fontSize: 10, background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderRadius: 6, padding: '1px 5px', fontWeight: 700 }}>★</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             <AnimatePresence>
               {showNuovoAnimale && (
-                <FormNuovoAnimale
-                  clienteId={f.cliente_id}
-                  razze={razze}
-                  onSaved={(a) => {
-                    setAnimali(prev => [...prev, a]);
-                    set('animale_id', a.id);
-                    setShowNuovoAnimale(false);
-                  }}
-                  onCancel={() => setShowNuovoAnimale(false)}
-                />
+                <FormNuovoAnimale clienteId={f.cliente_id} razze={razze}
+                  onSaved={(a) => { setAnimali(prev => [...prev, a]); set('animale_id', a.id); setShowNuovoAnimale(false); }}
+                  onCancel={() => setShowNuovoAnimale(false)} />
               )}
             </AnimatePresence>
           </div>
@@ -767,37 +667,19 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
         {/* Alert problemi animale */}
         {(() => {
-          const animaleSelezionato = animali.find(a => a.id === f.animale_id);
-          const hasProblemiSalute    = animaleSelezionato?.problemi_salute?.trim();
-          const hasProblemiCarattere = animaleSelezionato?.problemi_carattere?.trim();
-          if (!hasProblemiSalute && !hasProblemiCarattere) return null;
+          const a = animali.find(x => x.id === f.animale_id);
+          if (!a?.problemi_salute?.trim() && !a?.problemi_carattere?.trim()) return null;
           return (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              style={{
-                marginBottom: 16, borderRadius: 14,
-                background: 'rgba(234,179,8,0.10)',
-                border: '1.5px solid rgba(234,179,8,0.35)',
-                padding: '12px 14px',
-                display: 'flex', gap: 10, alignItems: 'flex-start',
-              }}
-            >
+            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+              style={{ marginBottom: 16, borderRadius: 14, background: 'rgba(234,179,8,0.10)',
+                border: '1.5px solid rgba(234,179,8,0.35)', padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <div style={{ fontSize: 20, flexShrink: 0, lineHeight: 1 }}>⚠️</div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                   Attenzione — note sull'animale
                 </div>
-                {hasProblemiSalute && (
-                  <div style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: hasProblemiCarattere ? 4 : 0 }}>
-                    <span style={{ fontWeight: 600 }}>Salute:</span> {animaleSelezionato.problemi_salute}
-                  </div>
-                )}
-                {hasProblemiCarattere && (
-                  <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>
-                    <span style={{ fontWeight: 600 }}>Carattere:</span> {animaleSelezionato.problemi_carattere}
-                  </div>
-                )}
+                {a.problemi_salute && <div style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: a.problemi_carattere ? 4 : 0 }}><span style={{ fontWeight: 600 }}>Salute:</span> {a.problemi_salute}</div>}
+                {a.problemi_carattere && <div style={{ fontSize: 12, color: 'var(--text-primary)' }}><span style={{ fontWeight: 600 }}>Carattere:</span> {a.problemi_carattere}</div>}
               </div>
             </motion.div>
           );
@@ -812,16 +694,14 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               const sel = f.operatore_id === op.id;
               return (
                 <button key={op.id} onClick={() => set('operatore_id', op.id)} style={{
-                  padding: '8px 14px', borderRadius: 12, cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                  padding: '8px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
                   border: `1px solid ${sel ? colore + '60' : 'var(--card-border)'}`,
                   background: sel ? colore + '20' : 'var(--card-bg-sm)',
                   color: sel ? colore : 'var(--text-primary)',
                   display: 'flex', alignItems: 'center', gap: 8,
                 }}>
                   <div style={{ width: 20, height: 20, borderRadius: '50%', background: colore,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 10, fontWeight: 700, color: '#fff' }}>
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
                     {op.nome[0]}
                   </div>
                   {op.nome}
@@ -840,17 +720,14 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               return (
                 <button key={s.id} onClick={() => toggleServizio(s.id)} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 14px', borderRadius: 12, cursor: 'pointer',
-                  fontFamily: 'inherit', textAlign: 'left',
+                  padding: '10px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
                   border: `1px solid ${sel ? 'rgba(37,99,235,0.3)' : 'var(--card-border)'}`,
                   background: sel ? 'rgba(37,99,235,0.1)' : 'var(--card-bg-sm)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                    <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
                       background: sel ? '#2563eb' : 'var(--card-border)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {sel && <span style={{ fontSize: 11, color: '#fff', lineHeight: 1 }}>✓</span>}
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{s.nome}</span>
@@ -872,19 +749,15 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
             {durataConsigliata > 0 && (
               <button onClick={() => { set('durata_minuti', durataConsigliata); set('durata_auto', true); }} style={{
                 fontSize: 11, color: '#2563eb', background: 'rgba(37,99,235,0.1)',
-                border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
-              }}>
+                border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
                 Usa consigliata ({durataConsigliata} min)
               </button>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <input
-              type="number" min="5" max="480" step="5"
-              value={f.durata_minuti}
+            <input type="number" min="5" max="480" step="5" value={f.durata_minuti}
               onChange={e => { set('durata_minuti', e.target.value); set('durata_auto', false); }}
-              style={{ ...inputStyle, width: 100 }}
-            />
+              style={{ ...inputStyle, width: 100 }} />
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
               minuti — fine ore <strong style={{ color: 'var(--text-primary)' }}>{oraFine()}</strong>
             </div>
@@ -899,9 +772,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         {/* Note */}
         <div style={{ marginBottom: 16 }}>
           <div style={secLabel}>Note</div>
-          <textarea rows={3} placeholder="Note sull'appuntamento..."
-            value={f.note} onChange={e => set('note', e.target.value)}
-            style={{ ...inputStyle, resize: 'vertical' }} />
+          <textarea rows={3} placeholder="Note sull'appuntamento..." value={f.note}
+            onChange={e => set('note', e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} />
         </div>
 
         {/* Prezzo */}
@@ -912,9 +784,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               {clienteSelezionato?.prezzo_riservato && (
                 <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Riservato</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#2563eb' }}>
-                    € {Number(clienteSelezionato.prezzo_riservato).toFixed(2)}
-                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#2563eb' }}>€ {Number(clienteSelezionato.prezzo_riservato).toFixed(2)}</div>
                 </div>
               )}
               <div style={{ flex: 1, minWidth: 140 }}>
@@ -923,30 +793,22 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                 </div>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
-                  <input type="number" min="0" step="0.50"
-                    placeholder="0.00"
-                    value={f.prezzo_proposto}
-                    onChange={e => set('prezzo_proposto', e.target.value)}
-                    style={{ ...inputStyle, paddingLeft: 26 }}
-                  />
+                  <input type="number" min="0" step="0.50" placeholder="0.00" value={f.prezzo_proposto}
+                    onChange={e => set('prezzo_proposto', e.target.value)} style={{ ...inputStyle, paddingLeft: 26 }} />
                 </div>
               </div>
             </div>
 
-            {/* Sezione conferma prezzo — solo in modifica */}
+            {/* Conferma prezzo — solo in modifica */}
             {isEdit && (
               <div style={{ marginTop: 12, padding: '14px', borderRadius: 14,
                 background: f.prezzo_confermato_flag ? 'rgba(5,150,105,0.08)' : 'rgba(217,119,6,0.08)',
                 border: `1px solid ${f.prezzo_confermato_flag ? 'rgba(5,150,105,0.25)' : 'rgba(217,119,6,0.25)'}` }}>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: f.prezzo_confermato_flag ? '#059669' : '#d97706',
-                    textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {f.prezzo_confermato_flag ? '✓ Prezzo confermato' : 'Conferma prezzo finale'}
-                  </div>
+                <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10,
+                  color: f.prezzo_confermato_flag ? '#059669' : '#d97706', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {f.prezzo_confermato_flag ? '✓ Prezzo confermato' : 'Conferma prezzo finale'}
                 </div>
-
-                {/* ── Toggle metodo pagamento ── */}
+                {/* Toggle metodo pagamento */}
                 <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                   {[
                     { id: 'contanti', label: '💵 Contanti', activeColor: '#059669', activeBg: 'rgba(5,150,105,0.15)', activeBorder: 'rgba(5,150,105,0.4)' },
@@ -961,48 +823,26 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                         background: attivo ? m.activeBg : 'transparent',
                         color: attivo ? m.activeColor : 'var(--text-muted)',
                         transition: 'all 0.15s',
-                      }}>
-                        {m.label}
-                      </button>
+                      }}>{m.label}</button>
                     );
                   })}
                 </div>
-
-                {/* Input + bottone conferma */}
+                {/* Input + bottone */}
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <div style={{ position: 'relative', flex: 1 }}>
                     <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
-                    <input type="number" min="0" step="0.50"
-                      placeholder={f.prezzo_proposto || '0.00'}
-                      value={f.prezzo_confermato}
+                    <input type="number" min="0" step="0.50" placeholder={f.prezzo_proposto || '0.00'} value={f.prezzo_confermato}
                       onChange={e => { set('prezzo_confermato', e.target.value); set('prezzo_confermato_flag', false); }}
-                      style={{ ...inputStyle, paddingLeft: 26,
-                        borderColor: f.prezzo_confermato_flag ? 'rgba(5,150,105,0.4)' : 'var(--card-border)' }}
-                    />
+                      style={{ ...inputStyle, paddingLeft: 26, borderColor: f.prezzo_confermato_flag ? 'rgba(5,150,105,0.4)' : 'var(--card-border)' }} />
                   </div>
-                  <button
-                    onClick={() => {
-                      const val = f.prezzo_confermato || f.prezzo_proposto;
-                      set('prezzo_confermato', val);
-                      set('prezzo_confermato_flag', true);
-                    }}
-                    style={{
-                      padding: '10px 16px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
-                      fontSize: 13, fontWeight: 700, border: 'none',
-                      background: f.prezzo_confermato_flag
-                        ? 'linear-gradient(145deg,#34d399,#059669)'
-                        : 'linear-gradient(145deg,#fbbf24,#d97706)',
-                      color: '#fff',
-                      boxShadow: f.prezzo_confermato_flag
-                        ? '0 4px 12px rgba(5,150,105,0.35)'
-                        : '0 4px 12px rgba(217,119,6,0.35)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <button onClick={() => { const val = f.prezzo_confermato || f.prezzo_proposto; set('prezzo_confermato', val); set('prezzo_confermato_flag', true); }}
+                    style={{ padding: '10px 16px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, border: 'none',
+                      background: f.prezzo_confermato_flag ? 'linear-gradient(145deg,#34d399,#059669)' : 'linear-gradient(145deg,#fbbf24,#d97706)',
+                      color: '#fff', whiteSpace: 'nowrap',
+                      boxShadow: f.prezzo_confermato_flag ? '0 4px 12px rgba(5,150,105,0.35)' : '0 4px 12px rgba(217,119,6,0.35)' }}>
                     {f.prezzo_confermato_flag ? '✓ Confermato' : 'Conferma'}
                   </button>
                 </div>
-
                 {f.prezzo_confermato_flag && (
                   <div style={{ fontSize: 11, color: '#059669', marginTop: 8, fontWeight: 500 }}>
                     Prezzo finale: € {Number(f.prezzo_confermato).toFixed(2)} —{' '}
@@ -1018,16 +858,11 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
         {error && (
           <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 12,
-            padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>
-            {error}
-          </div>
+            padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>{error}</div>
         )}
 
-        {/* Azioni */}
         <div style={{ display: 'flex', gap: 10 }}>
-          {isEdit && (
-            <button onClick={deleteAppt} style={{ ...btnDanger, padding: '11px 14px' }}>Elimina</button>
-          )}
+          {isEdit && <button onClick={deleteAppt} style={{ ...btnDanger, padding: '11px 14px' }}>Elimina</button>}
           <button onClick={onClose} style={{ ...btnSecondary, flex: 1 }}>Annulla</button>
           <button onClick={save} disabled={loading} style={{ ...btnPrimary, flex: 2, opacity: loading ? 0.7 : 1 }}>
             {loading ? 'Salvataggio...' : isEdit ? 'Salva modifiche' : 'Crea appuntamento'}
@@ -1042,7 +877,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 // CALENDARIO PRINCIPALE
 // ─────────────────────────────────────────────────────────────
 export default function CalendarioView() {
-  const calRef = useRef(null);
+  const calRef         = useRef(null);
+  const dropdownRef    = useRef(null);
   const [operatori,    setOperatori]    = useState([]);
   const [events,       setEvents]       = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -1050,6 +886,15 @@ export default function CalendarioView() {
   const [selectedAppt, setSelectedAppt] = useState(null);
   const [clickedDate,  setClickedDate]  = useState(null);
   const [view,         setView]         = useState('timeGridWeek');
+  const [filtroOp,     setFiltroOp]     = useState('tutti');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Chiudi dropdown cliccando fuori
+  useEffect(() => {
+    const handler = e => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -1072,16 +917,14 @@ export default function CalendarioView() {
     setLoading(false);
   };
 
-  const apToEvents = (appts, ops) => appts.map((a) => {
+  const apToEvents = (appts, ops) => appts.map(a => {
     const op = ops.find(o => o.id === a.operatori?.id) || a.operatori;
     const idx = ops.findIndex(o => o.id === (op?.id || a.operatori?.id));
     const coloreBase = op?.colore || COLORI_OP[idx % COLORI_OP.length] || '#3b82f6';
     const prezzoOk = a.prezzo_confermato_flag;
     const colore = prezzoOk ? '#6b7280' : coloreBase;
-    const serviziMultipli = (a._serviziMultipli || a.appuntamenti_servizi || [])
-      .map(r => r.servizi || r)
-      .filter(Boolean);
-    const serviziNomi = serviziMultipli.map(s => s.nome).filter(Boolean);
+    const serviziNomi = (a._serviziMultipli || a.appuntamenti_servizi || [])
+      .map(r => (r.servizi || r)?.nome).filter(Boolean);
     return {
       id:              a.id,
       title:           a.animali?.nome || 'Appuntamento',
@@ -1091,9 +934,10 @@ export default function CalendarioView() {
       borderColor:     colore,
       textColor:       '#fff',
       extendedProps:   {
-        appuntamento: a,
+        appuntamento:  a,
         coloreBase,
         prezzoOk,
+        operatoreId:   a.operatori?.id || '',
         animaleNome:   a.animali?.nome || '',
         servizioNome:  serviziNomi,
         operatoreNome: op?.nome || '',
@@ -1101,6 +945,14 @@ export default function CalendarioView() {
       },
     };
   });
+
+  // Filtra eventi per operatore selezionato
+  const eventsFiltrati = filtroOp === 'tutti'
+    ? events
+    : events.filter(e => e.extendedProps.operatoreId === filtroOp);
+
+  const opSelezionato = operatori.find(o => o.id === filtroOp);
+  const coloreOpSel   = opSelezionato?.colore || '#2563eb';
 
   const handleEventClick = ({ event }) => {
     setSelectedAppt(event.extendedProps.appuntamento);
@@ -1129,98 +981,167 @@ export default function CalendarioView() {
         const nuovoEvent = apToEvents([apData], ops)[0];
         if (!nuovoEvent) return prevEvents;
         const exists = prevEvents.find(e => e.id === nuovoEvent.id);
-        if (exists) {
-          return prevEvents.map(e => e.id === nuovoEvent.id ? nuovoEvent : e);
-        }
-        return [...prevEvents, nuovoEvent];
+        return exists
+          ? prevEvents.map(e => e.id === nuovoEvent.id ? nuovoEvent : e)
+          : [...prevEvents, nuovoEvent];
       });
       return ops;
     });
   };
 
-  const handleDeleted = (id) => {
-    setEvents(prev => prev.filter(e => e.id !== id));
-  };
+  const handleDeleted = id => setEvents(prev => prev.filter(e => e.id !== id));
 
-  const changeView = (v) => {
-    setView(v);
-    calRef.current?.getApi().changeView(v);
-  };
+  const changeView = v => { setView(v); calRef.current?.getApi().changeView(v); };
 
   const VIEW_LABELS = { timeGridDay: 'Giorno', timeGridWeek: 'Settimana', dayGridMonth: 'Mese' };
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}
-      >
+
+      {/* ── Header ── */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+
+        {/* Titolo */}
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>Calendario</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            {events.length} appuntamenti
+            {eventsFiltrati.length}{filtroOp !== 'tutti' ? `/${events.length}` : ''} appuntamenti
           </div>
         </div>
 
+        {/* ── Dropdown operatori ── */}
+        <div ref={dropdownRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setDropdownOpen(p => !p)}
+            style={{
+              ...glassCard,
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 14px', cursor: 'pointer', border: '1px solid var(--card-border)',
+              fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+              color: filtroOp === 'tutti' ? 'var(--text-primary)' : coloreOpSel,
+              minWidth: 160,
+            }}
+          >
+            {filtroOp === 'tutti' ? (
+              <>
+                <div style={{ display: 'flex', gap: -4 }}>
+                  {operatori.slice(0, 3).map((op, i) => (
+                    <div key={op.id} style={{ width: 18, height: 18, borderRadius: '50%',
+                      background: op.colore || COLORI_OP[i], border: '2px solid var(--card-bg)',
+                      marginLeft: i > 0 ? -6 : 0, fontSize: 8, fontWeight: 700, color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {op.nome[0]}
+                    </div>
+                  ))}
+                </div>
+                <span style={{ flex: 1 }}>Tutti gli operatori</span>
+              </>
+            ) : (
+              <>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: coloreOpSel,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                  {opSelezionato?.nome[0]}
+                </div>
+                <span style={{ flex: 1 }}>{opSelezionato?.nome}</span>
+              </>
+            )}
+            {/* Chevron */}
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, transition: 'transform 0.2s', transform: dropdownOpen ? 'rotate(180deg)' : 'none' }}>
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          <AnimatePresence>
+            {dropdownOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.15 }}
+                style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                  minWidth: 200, zIndex: 9999,
+                  background: 'var(--dropdown-bg, #fff)',
+                  border: '1px solid var(--card-border)',
+                  borderRadius: 14,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Tutti */}
+                <button onClick={() => { setFiltroOp('tutti'); setDropdownOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                    padding: '11px 14px', background: filtroOp === 'tutti' ? 'rgba(37,99,235,0.08)' : 'none',
+                    border: 'none', borderBottom: '1px solid var(--card-border)',
+                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                  <div style={{ display: 'flex' }}>
+                    {operatori.slice(0, 3).map((op, i) => (
+                      <div key={op.id} style={{ width: 20, height: 20, borderRadius: '50%',
+                        background: op.colore || COLORI_OP[i], border: '2px solid var(--dropdown-bg, #fff)',
+                        marginLeft: i > 0 ? -6 : 0, fontSize: 9, fontWeight: 700, color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {op.nome[0]}
+                      </div>
+                    ))}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: filtroOp === 'tutti' ? '#2563eb' : 'var(--text-primary)' }}>
+                    Tutti gli operatori
+                  </span>
+                  {filtroOp === 'tutti' && <span style={{ marginLeft: 'auto', color: '#2563eb', fontSize: 14 }}>✓</span>}
+                </button>
+
+                {/* Lista operatori */}
+                {operatori.map((op, i) => {
+                  const colore = op.colore || COLORI_OP[i % COLORI_OP.length];
+                  const sel = filtroOp === op.id;
+                  return (
+                    <button key={op.id} onClick={() => { setFiltroOp(op.id); setDropdownOpen(false); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                        padding: '11px 14px', background: sel ? colore + '12' : 'none',
+                        border: 'none', borderBottom: '1px solid var(--card-border)',
+                        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                      <div style={{ width: 20, height: 20, borderRadius: '50%', background: colore, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff' }}>
+                        {op.nome[0]}
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: sel ? colore : 'var(--text-primary)', flex: 1 }}>
+                        {op.nome} {op.cognome}
+                      </span>
+                      {sel && <span style={{ color: colore, fontSize: 14 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Selettore vista */}
         <div style={{ ...glassCard, display: 'flex', gap: 3, padding: '5px' }}>
           {Object.entries(VIEW_LABELS).map(([v, label]) => (
-            <motion.button
-              key={v}
-              onClick={() => changeView(v)}
-              whileTap={{ scale: 0.95 }}
-              style={{
-                padding: '7px 14px', borderRadius: 11, border: 'none', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: 13, fontWeight: 600, transition: 'all 0.2s',
-                background: view === v ? 'var(--card-bg)' : 'transparent',
-                color: view === v ? 'var(--text-primary)' : 'var(--text-muted)',
-                boxShadow: view === v ? 'var(--card-shadow-sm)' : 'none',
-              }}
-            >
-              {label}
-            </motion.button>
+            <motion.button key={v} onClick={() => changeView(v)} whileTap={{ scale: 0.95 }} style={{
+              padding: '7px 14px', borderRadius: 11, border: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 13, fontWeight: 600, transition: 'all 0.2s',
+              background: view === v ? 'var(--card-bg)' : 'transparent',
+              color: view === v ? 'var(--text-primary)' : 'var(--text-muted)',
+              boxShadow: view === v ? 'var(--card-shadow-sm)' : 'none',
+            }}>{label}</motion.button>
           ))}
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
+        {/* Nuovo appuntamento */}
+        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
           onClick={() => { setSelectedAppt(null); setClickedDate(new Date()); setShowModal(true); }}
-          style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 8 }}
-        >
+          style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Nuovo appuntamento
         </motion.button>
       </motion.div>
 
-      {/* Legenda operatori */}
-      {operatori.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}
-        >
-          {operatori.map((op, i) => {
-            const colore = op.colore || COLORI_OP[i % COLORI_OP.length];
-            return (
-              <div key={op.id} style={{ display: 'flex', alignItems: 'center', gap: 6,
-                padding: '5px 12px', borderRadius: 20, background: colore + '18',
-                border: '1px solid ' + colore + '40' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: colore }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: colore }}>{op.nome}</span>
-              </div>
-            );
-          })}
-        </motion.div>
-      )}
-
-      {/* Calendario */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        style={{ ...glass, padding: 10, overflow: 'hidden' }}
-      >
+      {/* ── Calendario ── */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }} style={{ ...glass, padding: 10, overflow: 'hidden' }}>
         <style>{`
           :root { --dropdown-bg: #ffffff; }
           @media (prefers-color-scheme: dark) { :root { --dropdown-bg: #1a2d5a; } }
@@ -1228,27 +1149,15 @@ export default function CalendarioView() {
           .fc .fc-toolbar { gap: 8px; flex-wrap: wrap; margin-bottom: 8px !important; }
           .fc .fc-toolbar-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
           .fc .fc-button {
-            background: var(--card-bg-sm) !important;
-            border: 1px solid var(--card-border) !important;
-            color: var(--text-primary) !important;
-            border-radius: 10px !important;
-            font-family: inherit !important;
-            font-size: 13px !important;
-            font-weight: 600 !important;
-            padding: 6px 12px !important;
-            box-shadow: none !important;
+            background: var(--card-bg-sm) !important; border: 1px solid var(--card-border) !important;
+            color: var(--text-primary) !important; border-radius: 10px !important;
+            font-family: inherit !important; font-size: 13px !important;
+            font-weight: 600 !important; padding: 6px 12px !important; box-shadow: none !important;
           }
           .fc .fc-button:hover { background: var(--card-bg) !important; }
           .fc .fc-button-active { background: var(--card-bg) !important; }
-          .fc .fc-today-button { opacity: 0.8; }
           .fc-theme-standard td, .fc-theme-standard th { border-color: var(--card-border-sm) !important; }
-          .fc .fc-timegrid-slot { min-height: 0; }
-          .fc .fc-event {
-            border-radius: 8px !important;
-            cursor: pointer !important;
-            overflow: hidden !important;
-            border-width: 2px !important;
-          }
+          .fc .fc-event { border-radius: 8px !important; cursor: pointer !important; overflow: hidden !important; border-width: 2px !important; }
           .fc .fc-event:hover { filter: brightness(1.08) !important; transform: translateY(-1px) !important; transition: all 0.12s ease !important; }
           .fc .fc-event-main { padding: 0 !important; height: 100% !important; overflow: hidden !important; }
           .fc .fc-event-title-container { display: none !important; }
@@ -1263,66 +1172,53 @@ export default function CalendarioView() {
         `}</style>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
-            Caricamento calendario...
-          </div>
+          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>Caricamento calendario...</div>
         ) : (
           <FullCalendar
             ref={calRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView={view}
             locale={itLocale}
-            events={events}
+            events={eventsFiltrati}
             editable={true}
             selectable={true}
             selectMirror={true}
             dayMaxEvents={3}
             slotMinTime="09:00:00"
-            slotMaxTime="20:00:00"
-            slotDuration="00:30:00"
+            slotMaxTime="19:00:00"
+            slotDuration="00:10:00"
             slotLabelInterval="01:00"
             allDaySlot={false}
             nowIndicator={true}
-            headerToolbar={{
-              left: 'prev,next today',
-              center: 'title',
-              right: '',
-            }}
+            headerToolbar={{ left: 'prev,next today', center: 'title', right: '' }}
             eventClick={handleEventClick}
             dateClick={handleDateClick}
             eventDrop={handleEventDrop}
-            height="calc(100vh - 200px)"
+            height="calc(100vh - 130px)"
             expandRows={true}
             eventContent={({ event, timeText }) => {
               const { animaleNome, servizioNome, operatoreNome, prezzoOk, hasAlert } = event.extendedProps;
               const servizi = Array.isArray(servizioNome) ? servizioNome : (servizioNome ? [servizioNome] : []);
               return (
-                <div style={{
-                  padding: '3px 6px', height: '100%',
-                  display: 'flex', flexDirection: 'column',
-                  justifyContent: 'flex-start', overflow: 'hidden', gap: 1,
-                }}>
+                <div style={{ padding: '3px 6px', height: '100%', display: 'flex', flexDirection: 'column',
+                  justifyContent: 'flex-start', overflow: 'hidden', gap: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap', overflow: 'hidden' }}>
                     {prezzoOk && (
-                      <div style={{
-                        width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
+                      <div style={{ width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
                         background: 'linear-gradient(135deg,#a3e635,#22c55e)',
                         border: '1.5px solid rgba(255,255,255,0.9)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 1px 4px rgba(34,197,94,0.6)',
-                      }}>
+                        boxShadow: '0 1px 4px rgba(34,197,94,0.6)' }}>
                         <svg width="7" height="7" viewBox="0 0 10 10" fill="none">
                           <path d="M2 5l2.5 2.5 3.5-4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       </div>
                     )}
-                    {hasAlert && (
-                      <div style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}>⚠️</div>
-                    )}
+                    {hasAlert && <div style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}>⚠️</div>}
                     <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                       {animaleNome}
                     </span>
-                    {operatoreNome && (
+                    {operatoreNome && filtroOp === 'tutti' && (
                       <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.75, whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {operatoreNome}
                       </span>
@@ -1333,13 +1229,9 @@ export default function CalendarioView() {
                   </div>
                   {servizi.length > 0 && (
                     <div style={{ fontSize: 10, opacity: 0.78, lineHeight: 1.3 }}>
-                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {servizi[0]}
-                      </div>
+                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{servizi[0]}</div>
                       {servizi.length > 1 && (
-                        <div style={{ opacity: 0.65, fontStyle: 'italic' }}>
-                          +{servizi.length - 1} {servizi.length - 1 === 1 ? 'altro' : 'altri'}
-                        </div>
+                        <div style={{ opacity: 0.65, fontStyle: 'italic' }}>+{servizi.length - 1} {servizi.length - 1 === 1 ? 'altro' : 'altri'}</div>
                       )}
                     </div>
                   )}
@@ -1350,7 +1242,7 @@ export default function CalendarioView() {
         )}
       </motion.div>
 
-      {/* Modal appuntamento */}
+      {/* Modal */}
       <AnimatePresence>
         {showModal && (
           <ModalAppuntamento

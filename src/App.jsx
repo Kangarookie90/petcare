@@ -523,8 +523,8 @@ export default function App() {
         {/* Sidebar */}
         <nav className="sidebar">
           <div className="sidebar-logo">
-            <div className="logo-icon">P</div>
-            <span>PetCare</span>
+            <div className="logo-icon">N</div>
+            <span>Nemora</span>
           </div>
           {NAV_ITEMS.map((item) => (
             <motion.button

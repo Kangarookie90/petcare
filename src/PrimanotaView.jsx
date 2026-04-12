@@ -354,14 +354,30 @@ export default function PrimanotaView() {
 
   const calcolaTotali = (righe) => {
     const perTipo = {};
-    let incassi = 0, uscite = 0;
+    let contanti = 0, pos = 0, ecc = 0, uscite = 0, versamenti = 0;
     righe.forEach(r => {
       const imp = Number(r.importo || 0);
-      const segno = TIPI[r.tipo]?.segno ?? 1;
-      perTipo[r.tipo] = (perTipo[r.tipo] || 0) + imp;
-      if (segno > 0) incassi += imp; else uscite += imp;
+      if (r.tipo === 'toelettatura') {
+        const metodo = r.metodo_pagamento || 'contanti';
+        const chiave = metodo === 'pos' ? 'toelettatura_pos' : 'toelettatura_contanti';
+        perTipo[chiave] = (perTipo[chiave] || 0) + imp;
+        if (metodo === 'pos') pos += imp; else contanti += imp;
+      } else if (r.tipo === 'pos') {
+        perTipo['pos'] = (perTipo['pos'] || 0) + imp;
+        pos += imp;
+      } else if (r.tipo === 'ecc') {
+        perTipo['ecc'] = (perTipo['ecc'] || 0) + imp;
+        ecc += imp;
+      } else if (r.tipo === 'uscita') {
+        perTipo['uscita'] = (perTipo['uscita'] || 0) + imp;
+        uscite += imp;
+      } else if (r.tipo === 'versamento') {
+        perTipo['versamento'] = (perTipo['versamento'] || 0) + imp;
+        versamenti += imp;
+      }
     });
-    return { perTipo, incassi, uscite, netto: incassi - uscite };
+    const cassa = contanti + ecc - uscite - versamenti;
+    return { perTipo, contanti, pos, ecc, uscite, versamenti, cassa, incassi: contanti + pos + ecc, netto: contanti + pos + ecc - uscite - versamenti };
   };
 
   const totali = calcolaTotali([...righeToelettatura, ...movimenti]);
@@ -485,18 +501,27 @@ export default function PrimanotaView() {
 
       {/* KPI del giorno */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14, gridAutoRows: 'auto' }}>
         {[
-          { label: 'Incassi', value: totali.incassi, color: '#059669', icon: '📈' },
-          { label: 'Uscite',  value: totali.uscite,  color: '#dc2626', icon: '📉' },
-          { label: 'Saldo',   value: totali.netto,   color: totali.netto >= 0 ? '#2563eb' : '#dc2626', icon: '💰' },
+          { label: '✂️ Contanti',  value: totali.contanti, color: '#059669', icon: '💵' },
+          { label: '✂️ POS',       value: totali.pos,      color: '#7c3aed', icon: '💳' },
+          { label: 'ECC',          value: totali.ecc,      color: '#0891b2', icon: '🏦' },
+          { label: 'Uscite',       value: totali.uscite,   color: '#dc2626', icon: '💸' },
+          { label: 'Versamenti',   value: totali.versamenti, color: '#f97316', icon: '🏛️' },
+          { label: 'Cassa',        value: totali.cassa,    color: totali.cassa >= 0 ? '#2563eb' : '#dc2626', icon: '💰', bold: true },
         ].map(k => (
-          <div key={k.label} style={{ ...glass, padding: '16px 14px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+          <div key={k.label} style={{ ...glass, padding: '16px 14px', textAlign: 'center', position: 'relative', overflow: 'hidden',
+            ...(k.bold ? { gridColumn: 'span 3', borderTop: `3px solid ${k.color}` } : {}) }}>
             <div style={{ position: 'absolute', top: -10, right: -10, fontSize: 36, opacity: 0.08 }}>{k.icon}</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: k.color, letterSpacing: '-0.5px' }}>
+            <div style={{ fontSize: k.bold ? 26 : 22, fontWeight: 800, color: k.color, letterSpacing: '-0.5px' }}>
               {fmt(k.value)}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginTop: 3 }}>{k.label}</div>
+            {k.bold && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                (contanti + ECC − uscite − versamenti)
+              </div>
+            )}
           </div>
         ))}
       </motion.div>
@@ -509,13 +534,21 @@ export default function PrimanotaView() {
           <div style={secLabel}>Dettaglio per categoria</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {Object.entries(totali.perTipo).map(([k, v]) => {
-              const t = TIPI[k];
+              const META = {
+                toelettatura_contanti: { icon: '✂️', label: 'Toelettatura contanti', color: '#059669' },
+                toelettatura_pos:      { icon: '✂️', label: 'Toelettatura POS',      color: '#7c3aed' },
+                pos:                   { icon: '💳', label: 'POS manuale',            color: '#7c3aed' },
+                ecc:                   { icon: '🏦', label: 'ECC',                    color: '#0891b2' },
+                uscita:                { icon: '💸', label: 'Uscita',                 color: '#dc2626' },
+                versamento:            { icon: '🏛️', label: 'Versamento',             color: '#f97316' },
+              };
+              const m = META[k] || { icon: '•', label: k, color: 'var(--text-muted)' };
               return (
                 <div key={k} style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 16 }}>{t?.icon}</span>
+                  <span style={{ fontSize: 16 }}>{m.icon}</span>
                   <div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{t?.label || k}</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: t?.color }}>{fmt(v)}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{m.label}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: m.color }}>{fmt(v)}</div>
                   </div>
                 </div>
               );
