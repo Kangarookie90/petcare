@@ -8,6 +8,7 @@ import StatisticheView from './StatisticheView';
 import OperatoriView from './OperatoriView';
 import OfflineIndicator from './OfflineIndicator';
 import PrimanotaView from './PrimanotaView';
+import ProssimiView from './ProssimiView';
 
 // ── Varianti animazione pagine ──────────────────────────────
 const pageVariants = {
@@ -46,6 +47,16 @@ const NAV_ITEMS = [
         <circle cx="8" cy="16" r="1" fill="currentColor" />
         <circle cx="12" cy="16" r="1" fill="currentColor" />
         <circle cx="16" cy="16" r="1" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    id: "prossimi",
+    label: "Prossimi",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3.5 3.5" />
       </svg>
     ),
   },
@@ -314,6 +325,7 @@ export default function App() {
     switch (active) {
       case "home":       return <HomeView key="home" />;
       case "calendario": return <CalendarioView />;
+      case "prossimi":   return <ProssimiView key="prossimi" />;
       case "clienti":    return <ClientiView key="clienti" />;
       case "pet":        return <PetView key="pet" />;
       case "operatori":    return <OperatoriView key="operatori" />;
