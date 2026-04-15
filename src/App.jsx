@@ -214,6 +214,7 @@ function HomeView() {
           return (
             <motion.div key={op.id} variants={itemVariants}
               whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
               style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", boxShadow: "var(--card-shadow-sm)" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
@@ -266,6 +267,7 @@ function HomeView() {
           return (
             <motion.div key={a.id} variants={itemVariants}
               whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
               style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--card-shadow-sm)" }}
             >
               {/* Ora */}
@@ -359,6 +361,10 @@ export default function App() {
           background: rgba(200,220,255,0.5);
           border-right: 1px solid rgba(255,255,255,0.75);
           box-shadow: 2px 0 24px rgba(80,120,200,0.1);
+        }
+        @supports not (backdrop-filter: blur(1px)) {
+          .sidebar { background: rgba(200,220,255,0.95); }
+          .bottom-nav { background: rgba(210,228,255,0.97); }
         }
         .sidebar-logo { color: #081840; }
         .sidebar-item { color: rgba(20,50,120,0.5); }
@@ -556,11 +562,7 @@ export default function App() {
           .main.nav-hidden { padding: 32px 36px 36px; }
         }
 
-        /* ── View Transitions ── */
-        ::view-transition-old(root) { animation: 120ms ease both vtFadeOut; }
-        ::view-transition-new(root) { animation: 180ms ease both vtFadeIn; }
-        @keyframes vtFadeOut { to   { opacity: 0; } }
-        @keyframes vtFadeIn  { from { opacity: 0; } }
+        /* ── View Transitions — definiti in index.css ── */
       `}</style>
 
       <div className="app-bg" />

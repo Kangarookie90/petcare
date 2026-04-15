@@ -471,7 +471,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 14, scale: 0.98 }}
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{ ...glass, padding: 24, width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}
+        style={{ ...glass, padding: 24, width: '100%', maxWidth: 560, maxHeight: '92dvh', overflowY: 'auto' }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -1204,7 +1204,7 @@ export default function CalendarioView() {
             eventClick={handleEventClick}
             dateClick={handleDateClick}
             eventDrop={handleEventDrop}
-            height="calc(100vh - 130px)"
+            height="calc(100dvh - 130px)"
             expandRows={true}
             eventContent={({ event, timeText }) => {
               const { animaleNome, servizioNome, operatoreNome, prezzoOk, hasAlert } = event.extendedProps;

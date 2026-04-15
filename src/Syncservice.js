@@ -14,6 +14,12 @@ import { db } from './db';
 // ── Tabelle da sincronizzare ──────────────────────────────────
 const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi'];
 
+// ── Select con join per tabelle che hanno relazioni embedded ─
+const SELECT_MAP = {
+  animali:      '*, razze(id, nome), clienti(id, nome, cognome)',
+  appuntamenti: '*, clienti(nome, cognome), animali(nome, specie), operatori(id, nome, cognome, colore)',
+};
+
 // ── Stato connessione ─────────────────────────────────────────
 let isOnline = navigator.onLine;
 const listeners = new Set();
@@ -49,26 +55,9 @@ export async function syncAll() {
   await flushCoda();
 
   // 2. Scarica i dati freschi da Supabase
-  await Promise.all([
-    syncTabella('clienti', '*'),
-    syncTabella('operatori', '*'),
-    syncTabella('servizi', '*'),
-    syncTabella('razze', '*'),
-    syncTabella('primanota', '*'),
-    syncTabella('appuntamenti_servizi', '*'),
-    // Query complesse con join per mostrare i nomi anche offline
-    syncTabella('animali', `
-      *,
-      razze(id, nome),
-      clienti(id, nome, cognome)
-    `),
-    syncTabella('appuntamenti', `
-      *,
-      clienti(nome, cognome),
-      animali(nome, specie),
-      operatori(id, nome, cognome, colore)
-    `),
-  ]);
+  await Promise.all(
+    TABELLE.map(t => syncTabella(t, SELECT_MAP[t] || '*'))
+  );
   
   // 3. Aggiorna timestamp ultimo sync
   await db._sync.put({ chiave: 'ultimo_sync', valore: new Date().toISOString() });
@@ -167,8 +156,9 @@ export async function leggi(tabella, { filtri = {}, ordine = null } = {}) {
   }
 
   // Se online aggiorna in background (senza bloccare)
+  // Usa SELECT_MAP per preservare i join nei record locali
   if (isOnline) {
-    syncTabella(tabella, '*').catch(() => {});
+    syncTabella(tabella, SELECT_MAP[tabella] || '*').catch(() => {});
   }
 
   return dati;
