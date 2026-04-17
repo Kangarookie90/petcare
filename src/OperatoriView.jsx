@@ -458,7 +458,7 @@ export default function OperatoriView() {
   const disattivi = operatori.filter(o => !o.attivo);
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
 
       {/* Header */}
       <motion.div

@@ -278,6 +278,34 @@ function doExportExcel(righe, dal, al, totali) {
   XLSX.writeFile(wb, `PrimaNote_${dal.replace(/\//g,'')}_${al.replace(/\//g,'')}.xlsx`);
 }
 
+// ── Export CSV ────────────────────────────────────────────────
+function doExportCSV(righe, dal, al) {
+  const intestazione = ['Data', 'Tipo', 'Descrizione', 'Cliente', 'Operatore', 'Pagamento', 'Segno', 'Importo (EUR)'];
+  const righeCSV = righe.map(r => [
+    fmtData(r.data),
+    TIPI[r.tipo]?.label || r.tipo,
+    r.descrizione || (r._appId ? 'Appuntamento - ' + (r._cliente || '') : ''),
+    r._cliente || '',
+    r.operatori?.nome || '',
+    r.tipo === 'toelettatura' ? (r.metodo_pagamento === 'pos' ? 'POS' : 'Contanti') : '-',
+    TIPI[r.tipo]?.segno === -1 ? 'Uscita' : 'Entrata',
+    (Number(r.importo) * (TIPI[r.tipo]?.segno || 1)).toFixed(2),
+  ]);
+
+  const csv = [intestazione, ...righeCSV]
+    .map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';'))
+    .join('\n');
+
+  const bom = '\uFEFF'; // BOM UTF-8 per apertura corretta in Excel italiano
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'PrimaNote_' + dal.replace(/\//g,'') + '_' + al.replace(/\//g,'') + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─────────────────────────────────────────────────────────────
 // COMPONENTE PRINCIPALE
 // ─────────────────────────────────────────────────────────────
@@ -411,12 +439,13 @@ export default function PrimanotaView() {
     const tot = calcolaTotali(righe);
     const dal = fmtData(expDal); const al = fmtData(expAl);
     if (formato === 'pdf') doExportPDF(righe, dal, al, tot);
-    else doExportExcel(righe, dal, al, tot);
+    else if (formato === 'excel') doExportExcel(righe, dal, al, tot);
+    else if (formato === 'csv') doExportCSV(righe, dal, al);
     setExporting('');
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
 
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
@@ -493,6 +522,17 @@ export default function PrimanotaView() {
                   <path d="M3 9h18M3 15h18M9 3v18"/>
                 </svg>
                 Excel
+              </button>
+              <button onClick={() => handleExport('csv')} disabled={!!exporting}
+                style={{ flex: 1, padding: '11px', borderRadius: 13, cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: '#7c3aed',
+                  border: '1px solid rgba(124,58,237,0.3)', background: 'rgba(124,58,237,0.08)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                  <path d="M14 2v6h6M8 13h2m2 0h2M8 17h8"/>
+                </svg>
+                CSV
               </button>
             </div>
           </motion.div>

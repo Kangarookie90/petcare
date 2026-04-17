@@ -595,7 +595,7 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const opPref = operatori.find(o => o.id === animale.operatore_preferito_id);
 
   return (
-    <motion.div style={{maxWidth:720,margin:'0 auto'}}>
+    <motion.div style={{width:'100%'}}>
       <div style={{marginBottom:14}}>
         <button onClick={onBack} style={{...btnSecondary,padding:'8px 14px',fontSize:13}}>← Indietro</button>
       </div>
@@ -900,7 +900,7 @@ function ListaAnimali({ animali, loading, onSelect, onAdd }) {
   }, [hasMore, visibiliList.length]);
 
   return (
-    <div style={{maxWidth:720,margin:'0 auto'}}>
+    <div style={{width:'100%'}}>
       {/* Header */}
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:18}}>
         <div style={{flex:1}}>
@@ -936,7 +936,7 @@ function ListaAnimali({ animali, loading, onSelect, onAdd }) {
           {!search && <button onClick={onAdd} style={btnPrimary}>+ Aggiungi animale</button>}
         </div>
       ) : (
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:10}}>
           {visibiliList.map((a,i)=>(
             <motion.button
               key={a.id}

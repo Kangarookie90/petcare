@@ -474,7 +474,7 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
   ];
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
       {/* Back */}
       <div style={{ marginBottom: 14 }}>
         <button onClick={onBack} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>← Indietro</button>
@@ -641,7 +641,7 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      style={{ maxWidth: 720, margin: '0 auto' }}
+      style={{ width: '100%' }}
     >
       {/* Header */}
       <motion.div
@@ -687,7 +687,7 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
           {!search && <button onClick={onAdd} style={btnPrimary}>+ Aggiungi cliente</button>}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
           {filtered.map((c, i) => (
             <motion.button
               key={c.id}

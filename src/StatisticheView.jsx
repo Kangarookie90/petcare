@@ -375,6 +375,138 @@ function exportExcel(dati, appuntamenti, clienti, animali, meseLabel, sel) {
   XLSX.writeFile(wb, `PetCare_${meseLabel.replace(' ', '_')}.xlsx`);
 }
 
+// ── Export Excel con foglio Prima Nota ────────────────────────
+async function exportExcelConPrimaNota(dati, appuntamenti, clienti, animali, meseLabel, sel, dal, al) {
+  const { default: XLSX2 } = await import('xlsx');
+  const wb = XLSX2.utils.book_new();
+
+  // Riepilogo
+  if (sel?.riepilogo) {
+    const riepilogo = [
+      ['PetCare — Report', meseLabel],
+      [],
+      ['Metrica', 'Valore'],
+      ['Appuntamenti totali', dati.totaleAp],
+      ['Completati', dati.completati],
+      ['Cancellati', dati.cancellati],
+      ['Tasso completamento', dati.tassoCompletamento + '%'],
+      ['Ricavo stimato', dati.ricavoMese],
+      ['Clienti nuovi', dati.nuoviClienti],
+    ];
+    XLSX2.utils.book_append_sheet(wb, XLSX2.utils.aoa_to_sheet(riepilogo), 'Riepilogo');
+  }
+
+  // Prima Nota reale
+  if (sel?.primanota) {
+    const { createClient } = await import('@supabase/supabase-js');
+    // usa il client già disponibile nel modulo
+    const { data: movimenti } = await (await import('./supabaseClient')).supabase
+      .from('primanota')
+      .select('*, operatori(nome)')
+      .gte('data', dal)
+      .lte('data', al)
+      .order('data')
+      .order('created_at');
+
+    const TIPI_LABEL = {
+      toelettatura: 'Toelettatura', pos: 'POS', ecc: 'ECC',
+      uscita: 'Uscita', versamento: 'Versamento banca',
+    };
+    const TIPI_SEGNO = { uscita: -1, versamento: -1 };
+
+    const pnRows = [
+      ['Data', 'Tipo', 'Descrizione', 'Operatore', 'Segno', 'Importo (EUR)'],
+      ...(movimenti || []).map(r => [
+        new Date(r.data).toLocaleDateString('it-IT'),
+        TIPI_LABEL[r.tipo] || r.tipo,
+        r.descrizione || '',
+        r.operatori?.nome || '',
+        TIPI_SEGNO[r.tipo] === -1 ? 'Uscita' : 'Entrata',
+        Number(r.importo) * (TIPI_SEGNO[r.tipo] || 1),
+      ]),
+    ];
+    XLSX2.utils.book_append_sheet(wb, XLSX2.utils.aoa_to_sheet(pnRows), 'Prima Nota');
+  }
+
+  // Appuntamenti
+  if (sel?.appuntamenti && appuntamenti?.length > 0) {
+    const apRows = [
+      ['Data', 'Ora', 'Cliente', 'Animale', 'Specie', 'Servizio', 'Operatore', 'Stato', 'Prezzo'],
+      ...appuntamenti.map(a => [
+        new Date(a.inizio).toLocaleDateString('it-IT'),
+        new Date(a.inizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        ((a.clienti?.cognome || '') + ' ' + (a.clienti?.nome || '')).trim(),
+        a.animali?.nome || '',
+        a.animali?.specie || '',
+        (a.appuntamenti_servizi || []).map(r => r.servizi?.nome).filter(Boolean).join(', ') || '',
+        a.operatori?.nome || '',
+        a.stato,
+        a.prezzo_confermato_flag ? Number(a.prezzo_confermato).toFixed(2) : (a.prezzo_proposto ? Number(a.prezzo_proposto).toFixed(2) : ''),
+      ]),
+    ];
+    XLSX2.utils.book_append_sheet(wb, XLSX2.utils.aoa_to_sheet(apRows), 'Appuntamenti');
+  }
+
+  // Clienti
+  if (sel?.clienti && clienti?.length > 0) {
+    const clRows = [
+      ['Cognome', 'Nome', 'Telefono', 'Email', 'Indirizzo', 'Note', 'Registrato'],
+      ...clienti.map(c => [
+        c.cognome || '', c.nome || '', c.telefono || '', c.email || '',
+        c.indirizzo || '', c.note || '',
+        c.created_at ? new Date(c.created_at).toLocaleDateString('it-IT') : '',
+      ]),
+    ];
+    XLSX2.utils.book_append_sheet(wb, XLSX2.utils.aoa_to_sheet(clRows), 'Clienti');
+  }
+
+  // Animali
+  if (sel?.animali && animali?.length > 0) {
+    const anRows = [
+      ['Nome', 'Specie', 'Razza', 'Proprietario', 'Data nascita', 'Colore', 'Operatore pref.', 'Note', 'Registrato'],
+      ...animali.map(a => [
+        a.nome || '', a.specie || '', a.razze?.nome || '',
+        a.clienti ? ((a.clienti.cognome || '') + ' ' + (a.clienti.nome || '')).trim() : '',
+        a.data_nascita ? new Date(a.data_nascita).toLocaleDateString('it-IT') : '',
+        a.colore || '', a.operatori?.nome || '', a.note || '',
+        a.created_at ? new Date(a.created_at).toLocaleDateString('it-IT') : '',
+      ]),
+    ];
+    XLSX2.utils.book_append_sheet(wb, XLSX2.utils.aoa_to_sheet(anRows), 'Animali');
+  }
+
+  XLSX2.writeFile(wb, 'PetCare_' + meseLabel.replace(' ', '_') + '.xlsx');
+}
+
+// ── Export CSV statistiche ────────────────────────────────────
+function exportCSV(appuntamenti, meseLabel) {
+  const intestazione = ['Data', 'Ora', 'Cliente', 'Animale', 'Specie', 'Servizio', 'Operatore', 'Stato', 'Prezzo (EUR)'];
+  const righe = appuntamenti.map(a => [
+    new Date(a.inizio).toLocaleDateString('it-IT'),
+    new Date(a.inizio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+    ((a.clienti?.cognome || '') + ' ' + (a.clienti?.nome || '')).trim(),
+    a.animali?.nome || '',
+    a.animali?.specie || '',
+    (a.appuntamenti_servizi || []).map(r => r.servizi?.nome).filter(Boolean).join(', ') || '',
+    a.operatori?.nome || '',
+    a.stato,
+    a.prezzo_confermato_flag ? Number(a.prezzo_confermato).toFixed(2) : (a.prezzo_proposto ? Number(a.prezzo_proposto).toFixed(2) : ''),
+  ]);
+
+  const csv = [intestazione, ...righe]
+    .map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';'))
+    .join('\n');
+
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'PetCare_' + meseLabel.replace(' ', '_') + '_appuntamenti.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─────────────────────────────────────────────────────────────
 // COMPONENTE PRINCIPALE
 // ─────────────────────────────────────────────────────────────
@@ -384,6 +516,7 @@ export default function StatisticheView() {
   const [showExportPanel, setShowExportPanel] = useState(false);
   const [exportSel, setExportSel] = useState({
     riepilogo:     true,
+    primanota:     true,
     appuntamenti:  true,
     clienti:       true,
     animali:       true,
@@ -636,7 +769,20 @@ export default function StatisticheView() {
     setExporting('excel');
     setShowExportPanel(false);
     await new Promise(r => setTimeout(r, 100));
-    exportExcel(datiExport, apFiltrati, clienti, animali, periodoLabel, exportSel);
+    const dal = exportPeriodo === 'mese'
+      ? new Date(annoSel, meseSel, 1).toISOString().split('T')[0]
+      : (exportDal || '');
+    const al = exportPeriodo === 'mese'
+      ? new Date(annoSel, meseSel + 1, 0).toISOString().split('T')[0]
+      : (exportAl || '');
+    await exportExcelConPrimaNota(datiExport, apFiltrati, clienti, animali, periodoLabel, exportSel, dal, al);
+    setExporting('');
+  };
+
+  const handleCSV = () => {
+    setExporting('csv');
+    setShowExportPanel(false);
+    exportCSV(apFiltrati, periodoLabel);
     setExporting('');
   };
 
@@ -649,7 +795,7 @@ export default function StatisticheView() {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
 
       {/* Header */}
       <motion.div
@@ -742,6 +888,7 @@ export default function StatisticheView() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {[
                   { k: 'riepilogo',    l: 'Riepilogo statistiche', c: '#2563eb' },
+                  { k: 'primanota',    l: 'Prima Nota',             c: '#d97706' },
                   { k: 'appuntamenti', l: 'Appuntamenti',           c: '#059669' },
                   { k: 'clienti',      l: 'Clienti',                c: '#7c3aed' },
                   { k: 'animali',      l: 'Animali',                c: '#0891b2' },
@@ -777,6 +924,11 @@ export default function StatisticheView() {
                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 13, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: '#059669', border: '1px solid rgba(5,150,105,0.3)', background: 'rgba(5,150,105,0.08)', opacity: !Object.values(exportSel).some(Boolean) ? 0.4 : 1 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
                 {exporting === 'excel' ? 'Esporto...' : 'Scarica Excel'}
+              </button>
+              <button onClick={handleCSV} disabled={!!exporting}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 13, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: '#7c3aed', border: '1px solid rgba(124,58,237,0.3)', background: 'rgba(124,58,237,0.08)', opacity: exporting && exporting !== 'csv' ? 0.4 : 1 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h2m2 0h2M8 17h8"/></svg>
+                {exporting === 'csv' ? 'Esporto...' : 'CSV appuntamenti'}
               </button>
             </div>
           </motion.div>

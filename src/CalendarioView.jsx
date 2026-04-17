@@ -1006,7 +1006,7 @@ export default function CalendarioView() {
   const VIEW_LABELS = { timeGridDay: 'Giorno', timeGridWeek: 'Settimana', dayGridMonth: 'Mese' };
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
 
       {/* ── Header ── */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}

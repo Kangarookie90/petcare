@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
+import LoginView from './LoginView';
 import PetView from './PetView';
 import ClientiView from './ClientiView';
 import CalendarioView from './CalendarioView';
@@ -133,7 +134,7 @@ function HomeView() {
           clienti(nome, cognome),
           animali(nome, specie),
           operatori(id, nome, colore),
-          servizi(nome)
+          appuntamenti_servizi(servizi(nome))
         `).gte("inizio", inizioGiorno).lte("inizio", fineGiorno).order("inizio"),
         supabase.from("clienti").select("id", { count: "exact", head: true }),
       ]);
@@ -284,7 +285,7 @@ function HomeView() {
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {a.animali?.nome || "Animale"} — {a.servizi?.nome || "Servizio"}
+                  {a.animali?.nome || "Animale"} — {(a.appuntamenti_servizi?.[0]?.servizi?.nome) || 'Servizio'}
                 </p>
                 <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {a.clienti ? a.clienti.cognome + " " + a.clienti.nome : ""}{a.operatori ? " · " + a.operatori.nome : ""}
@@ -318,6 +319,51 @@ export default function App() {
   const [active, setActive] = useState("home");
   const [navHidden, setNavHidden] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [session, setSession] = useState(undefined); // undefined = caricamento, null = non loggato
+
+  // ── Auth: carica sessione iniziale e ascolta cambiamenti ──
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Loading iniziale mentre Supabase verifica la sessione
+  if (session === undefined) {
+    return (
+      <>
+        <div className="app-bg" />
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(37,99,235,0.6)" strokeWidth="2.5" strokeLinecap="round"
+            style={{ animation: 'spin 0.8s linear infinite' }}>
+            <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3"/>
+            <path d="M21 12a9 9 0 00-9-9"/>
+          </svg>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </>
+    );
+  }
+
+  // Non autenticato → mostra login
+  if (!session) {
+    return (
+      <>
+        <div className="app-bg" />
+        <LoginView />
+      </>
+    );
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   const handleNav = (id) => {
     setActive(id);
@@ -453,26 +499,55 @@ export default function App() {
         .sidebar.collapsed .sidebar-label { display: none; }
         .sidebar.collapsed .sidebar-logo span { display: none; }
         .sidebar.collapsed .sidebar-item { justify-content: center; gap: 0; padding: 13px 0; }
-        .sidebar-toggle {
-          display: none;
-          position: fixed;
-          top: 20px;
-          left: 258px;
-          z-index: 30;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          cursor: pointer;
-          border: 1px solid rgba(255,255,255,0.7);
-          background: rgba(210,228,255,0.85);
-          backdrop-filter: blur(10px);
+        .sidebar-toggle-btn {
+          display: flex;
           align-items: center;
-          justify-content: center;
-          box-shadow: 0 2px 8px rgba(60,100,200,0.2);
-          transition: left 0.3s cubic-bezier(0.4,0,0.2,1);
+          gap: 10px;
+          padding: 9px 14px;
+          border-radius: 99px;
+          cursor: pointer;
+          border: 1px solid rgba(255,255,255,0.82);
+          background: rgba(255,255,255,0.52);
+          backdrop-filter: blur(20px) saturate(1.8);
+          -webkit-backdrop-filter: blur(20px) saturate(1.8);
+          width: 100%;
+          font-size: 13px;
+          font-weight: 600;
+          text-align: left;
+          transition: all 0.2s;
           font-family: inherit;
+          color: rgba(20,50,120,0.75);
+          white-space: nowrap;
+          overflow: hidden;
+          margin-top: 6px;
+          box-shadow: 0 2px 0 rgba(255,255,255,0.9) inset, 0 4px 14px rgba(60,100,200,0.12);
         }
-        .sidebar-toggle.collapsed { left: 78px; }
+        .sidebar-toggle-btn:hover {
+          background: rgba(255,255,255,0.68);
+          box-shadow: 0 2px 0 rgba(255,255,255,0.95) inset, 0 6px 20px rgba(60,100,200,0.18);
+          border-color: rgba(255,255,255,0.95);
+        }
+        .sidebar-toggle-btn:active { transform: scale(0.97); }
+        .sidebar-toggle-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .sidebar.collapsed .sidebar-toggle-btn {
+          justify-content: center;
+          gap: 0;
+          padding: 9px 0;
+          border-radius: 14px;
+        }
+        @media (prefers-color-scheme: dark) {
+          .sidebar-toggle-btn {
+            border: 1px solid rgba(100,150,255,0.28);
+            background: rgba(60,100,220,0.18);
+            color: rgba(180,210,255,0.8);
+            box-shadow: 0 1px 0 rgba(120,170,255,0.15) inset, 0 4px 14px rgba(0,0,0,0.2);
+          }
+          .sidebar-toggle-btn:hover {
+            background: rgba(60,100,220,0.28);
+            border-color: rgba(100,150,255,0.45);
+            box-shadow: 0 1px 0 rgba(120,170,255,0.2) inset, 0 6px 20px rgba(0,0,0,0.3);
+          }
+        }
         .sidebar-logo {
           display: flex;
           align-items: center;
@@ -554,7 +629,6 @@ export default function App() {
         .nav-item span { font-size: 10px; font-weight: 600; letter-spacing: 0.1px; }
         @media (min-width: 640px) {
           .sidebar { display: flex; }
-          .sidebar-toggle { display: flex; }
           .bottom-nav { display: none; }
           .nav-toggle { display: none !important; }
           .main { margin-left: 240px; padding: 32px 36px 36px; transition: margin-left 0.3s cubic-bezier(0.4,0,0.2,1); }
@@ -588,21 +662,44 @@ export default function App() {
               <span className="sidebar-label">{item.label}</span>
             </motion.button>
           ))}
-        </nav>
 
-        {/* Sidebar toggle button */}
-        <button
-          className={"sidebar-toggle" + (sidebarCollapsed ? " collapsed" : "")}
-          onClick={() => setSidebarCollapsed(c => !c)}
-          title={sidebarCollapsed ? "Espandi menu" : "Comprimi menu"}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            {sidebarCollapsed
-              ? <path d="M9 18l6-6-6-6"/>
-              : <path d="M15 18l-6-6 6-6"/>
-            }
-          </svg>
-        </button>
+          {/* Spacer + Toggle + Logout */}
+          <div style={{ flex: 1 }} />
+
+          {/* Toggle comprimi/espandi — liquid glass pill */}
+          <button
+            className="sidebar-toggle-btn"
+            onClick={() => setSidebarCollapsed(c => !c)}
+            title={sidebarCollapsed ? "Espandi menu" : "Comprimi menu"}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18, flexShrink: 0, transition: 'transform 0.3s' }}>
+              {sidebarCollapsed
+                ? <><path d="M13 18l6-6-6-6"/><path d="M5 18l6-6-6-6"/></>
+                : <><path d="M11 18l-6-6 6-6"/><path d="M19 18l-6-6 6-6"/></>
+              }
+            </svg>
+            <span className="sidebar-label" style={{ letterSpacing: '0.1px' }}>
+              {sidebarCollapsed ? "Espandi" : "Comprimi"}
+            </span>
+          </button>
+
+          <motion.button
+            className="sidebar-item"
+            onClick={handleLogout}
+            whileHover={{ x: sidebarCollapsed ? 0 : 3 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            title={sidebarCollapsed ? "Esci" : undefined}
+            style={{ color: 'rgba(220,60,60,0.7)', marginTop: 4 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 22, height: 22, flexShrink: 0 }}>
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            <span className="sidebar-label">Esci</span>
+          </motion.button>
+        </nav>
 
         {/* Main — AnimatePresence per transizioni tra pagine */}
         <main className={"main" + (navHidden ? " nav-hidden" : "") + (sidebarCollapsed ? " sidebar-collapsed" : "")}>

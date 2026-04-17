@@ -284,7 +284,7 @@ export default function ProssimiView() {
     : appuntamenti.filter(a => a.stato === id).length;
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
 
       {/* Header */}
       <motion.div
