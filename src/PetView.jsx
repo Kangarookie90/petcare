@@ -72,7 +72,8 @@ function ClienteSearch({ clienti, value, onChange }) {
   useEffect(() => {
     const handler = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
   }, []);
 
   if (selezionato) {
@@ -108,7 +109,7 @@ function ClienteSearch({ clienti, value, onChange }) {
         <div style={{
           position: 'fixed',
           zIndex: 9999,
-          width: 380,
+          width: 'min(380px, calc(100vw - 32px))',
           background: 'var(--dropdown-bg, #ffffff)',
           border: '1px solid var(--card-border)',
           borderRadius: 12,
@@ -119,6 +120,7 @@ function ClienteSearch({ clienti, value, onChange }) {
           {filtrati.map(c => (
             <button key={c.id}
               onMouseDown={e => { e.preventDefault(); onChange(c.id); setQuery(''); setShow(false); }}
+              onTouchEnd={e => { e.preventDefault(); onChange(c.id); setQuery(''); setShow(false); }}
               style={{
                 display: 'block', width: '100%', padding: '10px 14px',
                 background: 'none', border: 'none',
@@ -141,7 +143,7 @@ function ClienteSearch({ clienti, value, onChange }) {
         </div>
       )}
       {show && query.length > 1 && filtrati.length === 0 && (
-        <div style={{ position: 'fixed', zIndex: 9999, width: 380,
+        <div style={{ position: 'fixed', zIndex: 9999, width: 'min(380px, calc(100vw - 32px))',
           ...glassCard, padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
           Nessun cliente trovato
         </div>
@@ -167,7 +169,8 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
   useEffect(() => {
     const handler = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
   }, []);
 
   if (selezionata) {
@@ -193,7 +196,7 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
       />
       {show && filtrate.length > 0 && (
         <div style={{
-          position: 'fixed', zIndex: 9999, width: 380,
+          position: 'fixed', zIndex: 9999, width: 'min(380px, calc(100vw - 32px))',
           background: 'var(--dropdown-bg, #ffffff)', border: '1px solid var(--card-border)',
           borderRadius: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
           maxHeight: 240, overflowY: 'auto',
@@ -201,6 +204,7 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
           {filtrate.map(r => (
             <button key={r.id}
               onMouseDown={e => { e.preventDefault(); onChange(r.id); setQuery(''); setShow(false); }}
+              onTouchEnd={e => { e.preventDefault(); onChange(r.id); setQuery(''); setShow(false); }}
               style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none',
                 border: 'none', borderBottom: '1px solid var(--card-border-sm)',
                 cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
@@ -211,7 +215,7 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
         </div>
       )}
       {show && query.length > 0 && filtrate.length === 0 && (
-        <div style={{ position: 'fixed', zIndex: 9999, width: 380,
+        <div style={{ position: 'fixed', zIndex: 9999, width: 'min(380px, calc(100vw - 32px))',
           ...glassCard, padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
           Nessuna razza trovata
         </div>
@@ -258,7 +262,9 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
       style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(10,24,64,0.35)',
-        backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}
+        WebkitBackdropFilter:'blur(8px)',backdropFilter:'blur(8px)',
+        display:'flex',alignItems:'center',justifyContent:'center',padding:20,
+        touchAction:'pan-y',overscrollBehavior:'contain' }}
       onClick={e => e.target===e.currentTarget && onClose()}>
       <style>{`
         :root { --dropdown-bg: #ffffff; }
@@ -269,7 +275,7 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{...glass,padding:24,width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto'}}>
+        style={{...glass,padding:24,width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
           <div style={{fontSize:18,fontWeight:700,color:'var(--text-primary)'}}>🐾 Nuovo animale</div>
           <button onClick={onClose} style={{background:'var(--card-bg-sm)',border:'1px solid rgba(255,255,255,0.7)',

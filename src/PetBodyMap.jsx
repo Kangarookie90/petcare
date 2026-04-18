@@ -422,6 +422,7 @@ export default function PetBodyMap({ pet, onZoneSaved }) {
             onTouchStart={startDraw}
             onTouchMove={draw}
             onTouchEnd={endDraw}
+            onTouchCancel={endDraw}
           />
         </div>
 

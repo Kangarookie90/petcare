@@ -10,6 +10,14 @@ import OperatoriView from './OperatoriView';
 import OfflineIndicator from './OfflineIndicator';
 import PrimanotaView from './PrimanotaView';
 import ProssimiView from './ProssimiView';
+import RicercaGlobale from './RicercaGlobale';
+import ProfiloView from './ProfiloView';
+import {
+  useNotifiche,
+  NotificaToast,
+  NotifichePanel,
+  CampanellaNotifiche,
+} from './NotifichePanel';
 
 // ── Varianti animazione pagine ──────────────────────────────
 const pageVariants = {
@@ -110,6 +118,16 @@ const NAV_ITEMS = [
         <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
         <circle cx="12" cy="7" r="4" />
         <path d="M12 11v4M10 13h4" />
+      </svg>
+    ),
+  },
+  {
+    id: "profilo",
+    label: "Profilo",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M6 20v-1a6 6 0 0112 0v1" />
       </svg>
     ),
   },
@@ -319,6 +337,8 @@ export default function App() {
   const [active, setActive] = useState("home");
   const [navHidden, setNavHidden] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showRicerca,    setShowRicerca]    = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [session, setSession] = useState(undefined); // undefined = caricamento, null = non loggato
 
   // ── Auth: carica sessione iniziale e ascolta cambiamenti ──
@@ -332,6 +352,18 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Cmd+K / Ctrl+K apre la ricerca globale
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowRicerca(v => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   // Loading iniziale mentre Supabase verifica la sessione
@@ -361,6 +393,8 @@ export default function App() {
     );
   }
 
+  const { notifiche, nonLette, nuovaToast, marcaLette } = useNotifiche();
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
@@ -379,6 +413,7 @@ export default function App() {
       case "operatori":    return <OperatoriView key="operatori" />;
       case "statistiche":  return <StatisticheView key="statistiche" />;
       case "primanota":    return <PrimanotaView key="primanota" />;
+      case "profilo":      return <ProfiloView key="profilo" />;
       default:           return null;
     }
   };
@@ -663,8 +698,55 @@ export default function App() {
             </motion.button>
           ))}
 
-          {/* Spacer + Toggle + Logout */}
+          {/* Bottone ricerca globale */}
+          <button
+            className="sidebar-item"
+            onClick={() => setShowRicerca(true)}
+            title={sidebarCollapsed ? "Cerca (⌘K)" : undefined}
+            style={{ color: 'rgba(20,50,120,0.55)', marginTop: 4 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 22, height: 22, flexShrink: 0 }}>
+              <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <span className="sidebar-label">Cerca <span style={{fontSize:11,opacity:0.5,fontWeight:400}}>⌘K</span></span>
+          </button>
+
+          {/* Spacer + Notifiche + Profilo + Logout */}
           <div style={{ flex: 1 }} />
+
+          {/* Campanella notifiche WhatsApp */}
+          <div style={{ display: 'flex', alignItems: 'center',
+            padding: sidebarCollapsed ? '6px 0' : '6px 8px',
+            justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+            gap: 10, marginBottom: 2 }}>
+            <CampanellaNotifiche nonLette={nonLette} onClick={() => setNotifPanelOpen(v => !v)} />
+            {!sidebarCollapsed && nonLette > 0 && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#d97706' }}>
+                {nonLette} nuov{nonLette === 1 ? 'a' : 'e'}
+              </span>
+            )}
+          </div>
+
+          {/* Avatar → Profilo */}
+          <motion.button
+            className={"sidebar-item" + (active === "profilo" ? " active" : "")}
+            onClick={() => handleNav("profilo")}
+            whileHover={{ x: sidebarCollapsed ? 0 : 3 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            title={sidebarCollapsed ? "Profilo" : undefined}
+            style={{ marginBottom: 2 }}
+          >
+            <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+              background: 'linear-gradient(145deg, #5aabff, #2060dd)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 800, color: '#fff' }}>
+              {session?.user?.email ? session.user.email.slice(0, 2).toUpperCase() : '?'}
+            </div>
+            <span className="sidebar-label" style={{ fontSize: 14 }}>
+              {session?.user?.email?.split('@')[0] || 'Profilo'}
+            </span>
+          </motion.button>
 
           {/* Toggle comprimi/espandi — liquid glass pill */}
           <button
@@ -795,6 +877,41 @@ export default function App() {
           )}
         </AnimatePresence>
       </div>
+      {/* Toast notifica WhatsApp in tempo reale */}
+      <AnimatePresence>
+        {nuovaToast && (
+          <NotificaToast
+            notifica={nuovaToast}
+            onClose={() => {}}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Pannello notifiche slide-in */}
+      <AnimatePresence>
+        {notifPanelOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setNotifPanelOpen(false)}
+              style={{ position: 'fixed', inset: 0, zIndex: 399,
+                background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(2px)' }}
+            />
+            <NotifichePanel
+              notifiche={notifiche}
+              nonLette={nonLette}
+              onMarcaLette={marcaLette}
+              onClose={() => setNotifPanelOpen(false)}
+              onNavigate={(sezione) => { setActive(sezione); setNotifPanelOpen(false); }}
+            />
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Ricerca globale overlay */}
+      <AnimatePresence>
+        {showRicerca && <RicercaGlobale onClose={() => setShowRicerca(false)} />}
+      </AnimatePresence>
      <OfflineIndicator />
     </>
   );

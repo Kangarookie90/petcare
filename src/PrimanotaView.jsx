@@ -94,8 +94,10 @@ function ModalMovimento({ data, operatori, onClose, onSaved }) {
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(10,24,64,0.45)',
-        backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', padding: 20 }}
+        WebkitBackdropFilter: 'blur(10px)', backdropFilter: 'blur(10px)',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'center', padding: 20,
+        touchAction: 'pan-y', overscrollBehavior: 'contain' }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <motion.div
@@ -103,7 +105,7 @@ function ModalMovimento({ data, operatori, onClose, onSaved }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 14 }}
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{ ...glass, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}
+        style={{ ...glass, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>

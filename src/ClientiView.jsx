@@ -64,9 +64,12 @@ function ModalOverlay({ onClose, children, maxWidth = 520, zIndex = 200 }) {
       style={{
         position: 'fixed', inset: 0, zIndex,
         background: 'rgba(10,24,64,0.4)',
+        WebkitBackdropFilter: 'blur(10px)',
         backdropFilter: 'blur(10px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
+        touchAction: 'pan-y',
+        overscrollBehavior: 'contain',
       }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
@@ -77,7 +80,7 @@ function ModalOverlay({ onClose, children, maxWidth = 520, zIndex = 200 }) {
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
         style={{
           ...glass, padding: 24, width: '100%',
-          maxWidth, maxHeight: '90vh', overflowY: 'auto',
+          maxWidth, maxHeight: '90vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
         }}
       >
         {children}

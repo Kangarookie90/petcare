@@ -378,6 +378,9 @@ export default function RicercaGlobale({ onClose, onNavigate }) {
           justify-content: center;
           padding: 80px 20px 40px;
           overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
         }
         @media (max-width: 639px) {
           .rg-overlay { padding: 24px 12px 40px; align-items: flex-start; }

@@ -242,9 +242,12 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
         background: 'rgba(10,24,64,0.45)',
+        WebkitBackdropFilter: 'blur(10px)',
         backdropFilter: 'blur(10px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
+        touchAction: 'pan-y',
+        overscrollBehavior: 'contain',
       }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
@@ -253,7 +256,7 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 14, scale: 0.98 }}
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{ ...glass, padding: 24, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}
+        style={{ ...glass, padding: 24, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
@@ -279,13 +282,11 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
                 }
                 {isEdit && (
                   <div style={{
-                    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)',
+                    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.25)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    opacity: 0, transition: 'opacity 0.2s',
-                  }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                    onMouseLeave={e => e.currentTarget.style.opacity = 0}
-                  >
+                    opacity: fotoUrl ? 0 : 1, transition: 'opacity 0.2s',
+                    pointerEvents: 'none',
+                  }}>
                     <span style={{ fontSize: 16 }}>{uploadingFoto ? '⏳' : '📷'}</span>
                   </div>
                 )}
