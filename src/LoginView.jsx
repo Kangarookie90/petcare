@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 
+
 export default function LoginView() {
   const [email,        setEmail]        = useState('');
   const [password,     setPassword]     = useState('');
@@ -270,19 +271,11 @@ export default function LoginView() {
 
           {/* Logo + titolo */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <div style={{ width: 58, height: 58, borderRadius: 18,
-              background: 'linear-gradient(145deg, #5aabff, #2060dd)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 26, margin: '0 auto 16px',
-              boxShadow: '0 6px 20px rgba(60,120,220,0.4)' }}>
-              🐾
-            </div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.4px' }}>
-              Benvenuto
-            </h1>
-            <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
-              Accedi al tuo account
-            </p>
+            <img
+              src="/assets/nemora-logo-login.svg"
+              alt="Nemora"
+              style={{ width: '100%', height: 'auto', margin: '0 auto', display: 'block' }}
+            />
           </div>
 
           <form onSubmit={handleLogin}>

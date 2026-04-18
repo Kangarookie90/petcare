@@ -1,0 +1,51 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Nemora – icona app 1024x1024</title>
+  <desc>Icona quadrata con angoli arrotondati per installazione su iOS, Android e iPad</desc>
+
+  <!-- background -->
+  <rect width="1024" height="1024" rx="226" fill="#0F6E56"/>
+
+  <!-- stem main -->
+  <path d="M512 720 Q512 640 512 570" fill="none" stroke="#E1F5EE" stroke-width="18" stroke-linecap="round"/>
+  <!-- stem extension to sprout -->
+  <path d="M512 570 Q512 510 512 460" fill="none" stroke="#9FE1CB" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- sprout left -->
+  <path d="M512 460 Q456 412 446 348 Q480 382 512 460" fill="#5DCAA5"/>
+  <path d="M512 460 Q456 412 446 348 Q480 382 512 460" fill="none" stroke="#9FE1CB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- sprout right -->
+  <path d="M512 460 Q568 412 578 350 Q546 384 512 460" fill="#9FE1CB"/>
+  <path d="M512 460 Q568 412 578 350 Q546 384 512 460" fill="none" stroke="#9FE1CB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- bud tip -->
+  <circle cx="512" cy="342" r="18" fill="#E1F5EE"/>
+
+  <!-- leaf large left -->
+  <path d="M512 570 Q416 508 392 424 Q448 464 512 570" fill="#9FE1CB"/>
+  <path d="M512 570 Q416 508 392 424 Q448 464 512 570" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- leaf medium right -->
+  <path d="M512 592 Q602 542 610 468 Q564 508 512 592" fill="#9FE1CB"/>
+  <path d="M512 592 Q602 542 610 468 Q564 508 512 592" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- extra leaf left low -->
+  <path d="M512 618 Q438 588 420 534 Q464 556 512 618" fill="#9FE1CB" opacity="0.85"/>
+  <!-- extra leaf right mid -->
+  <path d="M512 548 Q584 510 590 446 Q554 480 512 548" fill="#9FE1CB" opacity="0.85"/>
+
+  <!-- ground line -->
+  <line x1="390" y1="724" x2="634" y2="724" stroke="#9FE1CB" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- floating dots above -->
+  <circle cx="420" cy="298" r="10" fill="#9FE1CB" opacity="0.7"/>
+  <circle cx="600" cy="272" r="8"  fill="#5DCAA5" opacity="0.65"/>
+  <circle cx="508" cy="248" r="7"  fill="#E1F5EE" opacity="0.6"/>
+  <circle cx="460" cy="220" r="5"  fill="#9FE1CB" opacity="0.5"/>
+  <circle cx="556" cy="230" r="6"  fill="#5DCAA5" opacity="0.55"/>
+
+  <!-- wordmark -->
+  <text x="512" y="870"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="112" font-weight="400" letter-spacing="18"
+    fill="#E1F5EE">nemora</text>
+</svg>

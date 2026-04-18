@@ -1,0 +1,189 @@
+<svg width="680" height="460" viewBox="130 40 420 400" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Nemora – logo animato login</title>
+  <desc>Logo con germoglio, foglie animate e palline fluttuanti per la pagina di login</desc>
+  <defs>
+    <style>
+      @keyframes sway {
+        0%   { transform: rotate(-4deg); }
+        50%  { transform: rotate(4deg); }
+        100% { transform: rotate(-4deg); }
+      }
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes drawPath {
+        to { stroke-dashoffset: 0; }
+      }
+      @keyframes float1 {
+        0%,100% { transform: translateY(0) translateX(0); opacity:0.5; }
+        40%     { transform: translateY(-11px) translateX(3px); opacity:1; }
+        70%     { transform: translateY(-5px) translateX(-2px); opacity:0.7; }
+      }
+      @keyframes float2 {
+        0%,100% { transform: translateY(0) translateX(0); opacity:0.4; }
+        45%     { transform: translateY(-14px) translateX(-4px); opacity:0.9; }
+      }
+      @keyframes float3 {
+        0%,100% { transform: translateY(0); opacity:0.35; }
+        50%     { transform: translateY(-8px); opacity:0.8; }
+      }
+      @keyframes leafDrift1 {
+        0%,100% { transform: rotate(-5deg) translateY(0); opacity:0.6; }
+        50%     { transform: rotate(8deg) translateY(-9px); opacity:0.9; }
+      }
+      @keyframes leafDrift2 {
+        0%,100% { transform: rotate(4deg) translateY(0); opacity:0.5; }
+        50%     { transform: rotate(-9deg) translateY(-7px); opacity:0.85; }
+      }
+      @keyframes leafDrift3 {
+        0%,100% { transform: rotate(0deg) translateY(0); opacity:0.45; }
+        50%     { transform: rotate(11deg) translateY(-11px); opacity:0.8; }
+      }
+      .sway-group { transform-origin: 340px 278px; animation: sway 4.5s ease-in-out infinite 3s; }
+      .wordmark   { animation: fadeUp 0.9s ease forwards 2.4s; opacity:0; }
+      .tagline    { animation: fadeUp 0.9s ease forwards 3.0s; opacity:0; }
+      .d1  { animation: float1 3.4s ease-in-out infinite 3.0s; }
+      .d2  { animation: float2 4.0s ease-in-out infinite 3.4s; }
+      .d3  { animation: float3 2.9s ease-in-out infinite 3.8s; }
+      .d4  { animation: float1 3.8s ease-in-out infinite 4.2s; }
+      .d5  { animation: float2 3.1s ease-in-out infinite 3.6s; }
+      .d6  { animation: float3 4.2s ease-in-out infinite 4.5s; }
+      .d7  { animation: float1 3.5s ease-in-out infinite 3.2s; }
+      .d8  { animation: float2 2.8s ease-in-out infinite 4.0s; }
+      .d9  { animation: float3 3.6s ease-in-out infinite 3.3s; }
+      .d10 { animation: float1 4.1s ease-in-out infinite 3.7s; }
+      .d11 { animation: float2 3.3s ease-in-out infinite 4.1s; }
+      .d12 { animation: float3 3.9s ease-in-out infinite 3.5s; }
+      .lf1 { transform-origin: 195px 155px; animation: leafDrift1 5.0s ease-in-out infinite 3.5s; }
+      .lf2 { transform-origin: 488px 128px; animation: leafDrift2 4.4s ease-in-out infinite 4.0s; }
+      .lf3 { transform-origin: 152px 215px; animation: leafDrift3 5.8s ease-in-out infinite 3.8s; }
+      .lf4 { transform-origin: 518px 195px; animation: leafDrift1 4.8s ease-in-out infinite 4.3s; }
+      .lf5 { transform-origin: 268px  88px; animation: leafDrift2 5.2s ease-in-out infinite 3.2s; }
+      .lf6 { transform-origin: 428px  82px; animation: leafDrift3 4.6s ease-in-out infinite 4.6s; }
+      .lf7 { transform-origin: 305px 155px; animation: leafDrift1 4.9s ease-in-out infinite 3.9s; }
+      .lf8 { transform-origin: 375px 140px; animation: leafDrift2 5.3s ease-in-out infinite 4.4s; }
+      .lf9 { transform-origin: 338px 108px; animation: leafDrift3 4.7s ease-in-out infinite 3.6s; }
+    </style>
+  </defs>
+
+  <rect width="680" height="460" fill="white"/>
+
+  <!-- dots perimeter -->
+  <circle class="d1"  cx="205" cy="160" r="3.5" fill="#5DCAA5"/>
+  <circle class="d2"  cx="468" cy="135" r="3"   fill="#1D9E75"/>
+  <circle class="d3"  cx="392" cy="108" r="2.5" fill="#9FE1CB"/>
+  <circle class="d4"  cx="298" cy="90"  r="2"   fill="#5DCAA5"/>
+  <circle class="d5"  cx="442" cy="172" r="4"   fill="#9FE1CB"/>
+  <circle class="d6"  cx="238" cy="104" r="2.5" fill="#1D9E75"/>
+  <circle class="d7"  cx="358" cy="75"  r="3"   fill="#5DCAA5"/>
+  <circle class="d8"  cx="512" cy="98"  r="2"   fill="#9FE1CB"/>
+  <circle class="d9"  cx="312" cy="148" r="2"   fill="#9FE1CB"/>
+  <circle class="d10" cx="370" cy="132" r="1.8" fill="#5DCAA5"/>
+  <circle class="d11" cx="336" cy="108" r="2.2" fill="#1D9E75"/>
+  <circle class="d12" cx="348" cy="82"  r="1.5" fill="#9FE1CB"/>
+
+  <!-- floating leaves perimeter -->
+  <g class="lf1">
+    <path d="M195 155 Q183 141 185 126 Q193 136 195 155" fill="#9FE1CB" opacity="0.7"/>
+    <path d="M195 155 Q183 141 185 126" fill="none" stroke="#1D9E75" stroke-width="1" stroke-linecap="round"/>
+  </g>
+  <g class="lf2">
+    <path d="M488 128 Q500 114 498 98 Q490 110 488 128" fill="#5DCAA5" opacity="0.65"/>
+    <path d="M488 128 Q500 114 498 98" fill="none" stroke="#0F6E56" stroke-width="1" stroke-linecap="round"/>
+  </g>
+  <g class="lf3">
+    <path d="M152 215 Q138 202 140 186 Q150 197 152 215" fill="#9FE1CB" opacity="0.55"/>
+    <path d="M152 215 Q138 202 140 186" fill="none" stroke="#1D9E75" stroke-width="0.8" stroke-linecap="round"/>
+  </g>
+  <g class="lf4">
+    <path d="M518 195 Q533 182 530 165 Q521 177 518 195" fill="#5DCAA5" opacity="0.6"/>
+    <path d="M518 195 Q533 182 530 165" fill="none" stroke="#0F6E56" stroke-width="0.8" stroke-linecap="round"/>
+  </g>
+  <g class="lf5">
+    <path d="M268 88 Q256 74 259 59 Q267 70 268 88" fill="#9FE1CB" opacity="0.5"/>
+    <path d="M268 88 Q256 74 259 59" fill="none" stroke="#1D9E75" stroke-width="0.9" stroke-linecap="round"/>
+  </g>
+  <g class="lf6">
+    <path d="M428 82 Q442 68 440 53 Q432 65 428 82" fill="#5DCAA5" opacity="0.5"/>
+    <path d="M428 82 Q442 68 440 53" fill="none" stroke="#0F6E56" stroke-width="0.9" stroke-linecap="round"/>
+  </g>
+  <g class="lf7">
+    <path d="M305 155 Q292 141 295 126 Q303 137 305 155" fill="#9FE1CB" opacity="0.6"/>
+    <path d="M305 155 Q292 141 295 126" fill="none" stroke="#1D9E75" stroke-width="0.9" stroke-linecap="round"/>
+  </g>
+  <g class="lf8">
+    <path d="M375 140 Q388 126 385 111 Q377 123 375 140" fill="#5DCAA5" opacity="0.55"/>
+    <path d="M375 140 Q388 126 385 111" fill="none" stroke="#0F6E56" stroke-width="0.9" stroke-linecap="round"/>
+  </g>
+  <g class="lf9">
+    <path d="M338 108 Q325 93 328 78 Q337 90 338 108" fill="#9FE1CB" opacity="0.5"/>
+    <path d="M338 108 Q325 93 328 78" fill="none" stroke="#1D9E75" stroke-width="0.8" stroke-linecap="round"/>
+  </g>
+
+  <!-- main plant -->
+  <g class="sway-group">
+    <path d="M340 328 Q340 300 340 278"
+      fill="none" stroke="#1D9E75" stroke-width="2.5" stroke-linecap="round"
+      stroke-dasharray="60" stroke-dashoffset="60"
+      style="animation: drawPath 0.9s ease forwards 0.2s;"/>
+    <path d="M340 278 Q340 258 340 242"
+      fill="none" stroke="#0F6E56" stroke-width="2" stroke-linecap="round"
+      stroke-dasharray="40" stroke-dashoffset="40"
+      style="animation: drawPath 0.7s ease forwards 1.0s;"/>
+    <path d="M340 242 Q318 224 314 202 Q328 216 340 242"
+      fill="none" stroke="#1D9E75" stroke-width="2" stroke-linecap="round"
+      stroke-dasharray="60" stroke-dashoffset="60"
+      style="animation: drawPath 0.8s ease forwards 1.6s;"/>
+    <path d="M340 242 Q318 224 314 202 Q328 216 340 242" fill="#5DCAA5" opacity="0"
+      style="animation: fadeUp 0.5s ease forwards 2.2s;"/>
+    <path d="M340 242 Q360 224 364 204 Q352 218 340 242"
+      fill="none" stroke="#1D9E75" stroke-width="2" stroke-linecap="round"
+      stroke-dasharray="55" stroke-dashoffset="55"
+      style="animation: drawPath 0.8s ease forwards 1.9s;"/>
+    <path d="M340 242 Q360 224 364 204 Q352 218 340 242" fill="#9FE1CB" opacity="0"
+      style="animation: fadeUp 0.5s ease forwards 2.4s;"/>
+    <circle cx="340" cy="200" r="4" fill="#1D9E75" opacity="0"
+      style="animation: fadeUp 0.5s ease forwards 2.6s;"/>
+    <path d="M340 278 Q304 252 293 218 Q312 232 340 278"
+      fill="none" stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round"
+      stroke-dasharray="220" stroke-dashoffset="220"
+      style="animation: drawPath 1.2s ease forwards 0.9s;"/>
+    <path d="M340 278 Q304 252 293 218 Q312 232 340 278" fill="#9FE1CB" opacity="0"
+      style="animation: fadeUp 0.6s ease forwards 1.9s;"/>
+    <path d="M340 288 Q372 266 376 240 Q360 257 340 288"
+      fill="none" stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round"
+      stroke-dasharray="160" stroke-dashoffset="160"
+      style="animation: drawPath 1.0s ease forwards 1.4s;"/>
+    <path d="M340 288 Q372 266 376 240 Q360 257 340 288" fill="#9FE1CB" opacity="0"
+      style="animation: fadeUp 0.6s ease forwards 2.2s;"/>
+    <path d="M340 298 Q312 284 305 264 Q322 273 340 298"
+      fill="none" stroke="#0F6E56" stroke-width="1.4" stroke-linecap="round"
+      stroke-dasharray="90" stroke-dashoffset="90"
+      style="animation: drawPath 0.8s ease forwards 1.2s;"/>
+    <path d="M340 298 Q312 284 305 264 Q322 273 340 298" fill="#9FE1CB" opacity="0"
+      style="animation: fadeUp 0.6s ease forwards 2.0s;"/>
+    <path d="M340 268 Q366 248 370 226 Q355 243 340 268"
+      fill="none" stroke="#0F6E56" stroke-width="1.4" stroke-linecap="round"
+      stroke-dasharray="80" stroke-dashoffset="80"
+      style="animation: drawPath 0.8s ease forwards 1.6s;"/>
+    <path d="M340 268 Q366 248 370 226 Q355 243 340 268" fill="#9FE1CB" opacity="0"
+      style="animation: fadeUp 0.6s ease forwards 2.3s;"/>
+  </g>
+
+  <line x1="295" y1="330" x2="385" y2="330"
+    stroke="#9FE1CB" stroke-width="1" stroke-linecap="round"
+    opacity="0" style="animation: fadeUp 0.5s ease forwards 1.0s;"/>
+
+  <text class="wordmark" x="340" y="386"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="40" font-weight="400" letter-spacing="8"
+    fill="#1D9E75">nemora</text>
+
+  <text class="tagline" x="340" y="412"
+    text-anchor="middle"
+    font-family="'Helvetica Neue', Arial, sans-serif"
+    font-size="11" font-weight="400" letter-spacing="2"
+    fill="#5DCAA5">pet grooming</text>
+</svg>

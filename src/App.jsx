@@ -341,6 +341,9 @@ export default function App() {
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [session, setSession] = useState(undefined); // undefined = caricamento, null = non loggato
 
+  // ── Notifiche: DEVE stare qui, prima di qualsiasi return condizionale ──
+  const { notifiche, nonLette, nuovaToast, marcaLette } = useNotifiche();
+
   // ── Auth: carica sessione iniziale e ascolta cambiamenti ──
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -392,8 +395,6 @@ export default function App() {
       </>
     );
   }
-
-  const { notifiche, nonLette, nuovaToast, marcaLette } = useNotifiche();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -594,12 +595,8 @@ export default function App() {
         }
         .logo-icon {
           width: 38px; height: 38px;
-          border-radius: 12px;
-          background: linear-gradient(145deg, #5aabff, #2060dd);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 18px;
-          box-shadow: 0 4px 12px rgba(60,120,220,0.35);
           flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
         }
         .sidebar-item {
           display: flex;
@@ -680,7 +677,9 @@ export default function App() {
         {/* Sidebar */}
         <nav className={"sidebar" + (sidebarCollapsed ? " collapsed" : "")}>
           <div className="sidebar-logo">
-            <div className="logo-icon">N</div>
+            <div className="logo-icon">
+              <img src="/assets/nemora-icon-1024.svg" alt="Nemora" style={{ width: 38, height: 38, borderRadius: 10 }} />
+            </div>
             <span>Nemora</span>
           </div>
           {NAV_ITEMS.map((item) => (
