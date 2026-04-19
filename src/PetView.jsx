@@ -72,7 +72,7 @@ function ClienteSearch({ clienti, value, onChange }) {
   useEffect(() => {
     const handler = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
     document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
+    document.addEventListener('touchstart', handler, { passive: true });
     return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
   }, []);
 
@@ -169,7 +169,7 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
   useEffect(() => {
     const handler = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
     document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
+    document.addEventListener('touchstart', handler, { passive: true });
     return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
   }, []);
 

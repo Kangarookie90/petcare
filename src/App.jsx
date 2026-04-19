@@ -831,6 +831,7 @@ export default function App() {
                 cursor: "pointer", fontFamily: "inherit",
                 fontSize: 12, fontWeight: 600,
                 color: "rgba(20,50,130,0.8)",
+                WebkitBackdropFilter: "blur(20px)",
                 backdropFilter: "blur(20px)",
                 boxShadow: "0 2px 0 rgba(255,255,255,0.9) inset, 0 4px 16px rgba(60,100,200,0.2)",
               }}
@@ -905,7 +906,7 @@ export default function App() {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setNotifPanelOpen(false)}
               style={{ position: 'fixed', inset: 0, zIndex: 399,
-                background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(2px)' }}
+                background: 'rgba(0,0,0,0.25)', WebkitBackdropFilter: 'blur(2px)', backdropFilter: 'blur(2px)' }}
             />
             <NotifichePanel
               notifiche={notifiche}

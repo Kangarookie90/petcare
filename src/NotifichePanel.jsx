@@ -169,7 +169,7 @@ export function NotifichePanel({ notifiche, nonLette, onMarcaLette, onClose, onN
       transition={{ type: 'spring', stiffness: 380, damping: 28 }}
       style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 400,
-        width: Math.min(380, window.innerWidth - 40),
+        width: 'min(380px, calc(100vw - 40px))',
         background: 'var(--card-bg)',
         borderLeft: '1px solid var(--card-border)',
         boxShadow: '-8px 0 40px rgba(0,0,0,0.15)',

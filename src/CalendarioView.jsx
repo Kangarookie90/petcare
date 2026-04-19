@@ -459,10 +459,11 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   onPan={() => {}}                      // ← assorbe eventuali pan gesture
   style={{ position: 'fixed', inset: 0, zIndex: 200,
     background: 'rgba(10,24,64,0.45)',
+    WebkitBackdropFilter: 'blur(10px)',
     backdropFilter: 'blur(10px)',
     display: 'flex', alignItems: 'center',
     justifyContent: 'center', padding: 20,
-    touchAction: 'pan-y',               // ← impedisce pan orizzontale ma permette scroll verticale
+    touchAction: 'pan-y',
   }}
   onClick={e => e.target === e.currentTarget && onClose()}
      >
@@ -891,15 +892,37 @@ export default function CalendarioView() {
   const [showModal,    setShowModal]    = useState(false);
   const [selectedAppt, setSelectedAppt] = useState(null);
   const [clickedDate,  setClickedDate]  = useState(null);
-  const [view,         setView]         = useState('timeGridWeek');
+  const [view,         setView]         = useState(() =>
+    window.innerWidth < 640 ? 'timeGridDay' : 'timeGridWeek'
+  );
   const [filtroOp,     setFiltroOp]     = useState('tutti');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Adatta la view al cambio orientamento / resize
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 640;
+      setView(prev => {
+        if (isMobile && prev === 'timeGridWeek') {
+          calRef.current?.getApi().changeView('timeGridDay');
+          return 'timeGridDay';
+        }
+        if (!isMobile && prev === 'timeGridDay') {
+          calRef.current?.getApi().changeView('timeGridWeek');
+          return 'timeGridWeek';
+        }
+        return prev;
+      });
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Chiudi dropdown cliccando fuori
   useEffect(() => {
     const handler = e => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false); };
     document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
+    document.addEventListener('touchstart', handler, { passive: true });
     return () => {
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('touchstart', handler);
