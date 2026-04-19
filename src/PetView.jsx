@@ -503,10 +503,56 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const [fotoError,       setFotoError]       = useState('');
   const fotoInputRef = useRef(null);
 
+  // ── Storico visite ──
+  const [visite,        setVisite]        = useState([]);
+  const [visiteLoding,  setVisiteLoading] = useState(false);
+
+  // ── Scheda sanitaria (editabile) ──
+  const [sanEdit,  setSanEdit]  = useState(false);
+  const [sanForm,  setSanForm]  = useState({
+    allergie:          animale.allergie          || '',
+    farmaci_in_corso:  animale.farmaci_in_corso  || '',
+    veterinario_nome:  animale.veterinario_nome  || '',
+    veterinario_tel:   animale.veterinario_tel   || '',
+  });
+  const [vaccini,    setVaccini]    = useState(animale.vaccini || []);
+  const [nuovoVacc,  setNuovoVacc]  = useState({ nome:'', data_ultima:'', scadenza:'' });
+  const [savingSan,  setSavingSan]  = useState(false);
+
   useEffect(() => {
     supabase.from('servizi').select('id,nome,durata_minuti').order('nome')
       .then(({ data }) => setServizi(data || []));
   }, []);
+
+  // Carica visite quando si apre il tab
+  useEffect(() => {
+    if (tab !== 'visite') return;
+    setVisiteLoading(true);
+    supabase
+      .from('appuntamenti')
+      .select('id, inizio, fine, stato, note, prezzo_confermato, prezzo_proposto, prezzo_confermato_flag, operatori(nome, cognome, colore), appuntamenti_servizi(servizi(nome))')
+      .eq('animale_id', animale.id)
+      .order('inizio', { ascending: false })
+      .limit(30)
+      .then(({ data }) => { setVisite(data || []); setVisiteLoading(false); });
+  }, [tab, animale.id]);
+
+  const saveSanitaria = async () => {
+    setSavingSan(true);
+    const updates = { ...sanForm, vaccini };
+    await supabase.from('animali').update(updates).eq('id', animale.id);
+    onUpdate({ ...animale, ...updates });
+    setSavingSan(false);
+    setSanEdit(false);
+  };
+
+  const addVaccino = () => {
+    if (!nuovoVacc.nome.trim()) return;
+    setVaccini(v => [...v, { ...nuovoVacc }]);
+    setNuovoVacc({ nome:'', data_ultima:'', scadenza:'' });
+  };
+
+  const removeVaccino = (i) => setVaccini(v => v.filter((_,idx) => idx !== i));
 
   // Carica signed URL per la foto
   useEffect(() => {
@@ -674,7 +720,7 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
 
       {/* Tab */}
       <div style={{...glass,padding:'6px',marginBottom:14,display:'flex',gap:4}}>
-        {[{id:'scheda',label:'📋 Scheda'},{id:'mappa',label:'🗺️ Mappa'},{id:'storico',label:'📌 Note'}].map(t=>(
+        {[{id:'scheda',label:'📋 Scheda'},{id:'mappa',label:'🗺️ Mappa'},{id:'salute',label:'🏥 Salute'},{id:'storico',label:'📌 Note'},{id:'visite',label:'📅 Visite'}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{
             flex:1,padding:'9px 8px',borderRadius:14,border:'none',cursor:'pointer',
             fontFamily:'inherit',fontSize:13,transition:'all 0.2s',
@@ -867,6 +913,246 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
             color:'#2563eb',fontWeight:600,fontSize:13}}>
             + Aggiungi nota
           </button>
+        </div>
+      )}
+
+      {/* ── SCHEDA SANITARIA ─────────────────────────────────── */}
+      {tab==='salute' && (
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+          {/* Header azioni */}
+          <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+            {sanEdit ? (
+              <>
+                <button onClick={()=>setSanEdit(false)} style={{...btnSecondary,padding:'8px 14px',fontSize:13}}>Annulla</button>
+                <button onClick={saveSanitaria} disabled={savingSan}
+                  style={{...btnPrimary,padding:'8px 18px',fontSize:13,opacity:savingSan?0.7:1}}>
+                  {savingSan?'Salvataggio...':'Salva'}
+                </button>
+              </>
+            ) : (
+              <button onClick={()=>setSanEdit(true)} style={{...btnSecondary,padding:'8px 14px',fontSize:13}}>
+                ✏️ Modifica
+              </button>
+            )}
+          </div>
+
+          {/* Allergie */}
+          <div style={{...glass,padding:'16px 18px'}}>
+            <div style={{...secLabel,marginBottom:10}}>⚠️ Allergie e intolleranze</div>
+            {sanEdit ? (
+              <textarea rows={3} placeholder="Es. allergia al profumo X, intolleranza al lattosio..."
+                value={sanForm.allergie}
+                onChange={e=>setSanForm(p=>({...p,allergie:e.target.value}))}
+                style={{...inputStyle,resize:'vertical'}}/>
+            ) : (
+              <div style={{fontSize:13,color:animale.allergie?'var(--text-primary)':'var(--text-muted)',lineHeight:1.6}}>
+                {animale.allergie || 'Nessuna allergia nota'}
+              </div>
+            )}
+          </div>
+
+          {/* Farmaci */}
+          <div style={{...glass,padding:'16px 18px'}}>
+            <div style={{...secLabel,marginBottom:10}}>💊 Farmaci in corso</div>
+            {sanEdit ? (
+              <textarea rows={2} placeholder="Es. Apoquel 5mg una volta al giorno..."
+                value={sanForm.farmaci_in_corso}
+                onChange={e=>setSanForm(p=>({...p,farmaci_in_corso:e.target.value}))}
+                style={{...inputStyle,resize:'vertical'}}/>
+            ) : (
+              <div style={{fontSize:13,color:animale.farmaci_in_corso?'var(--text-primary)':'var(--text-muted)',lineHeight:1.6}}>
+                {animale.farmaci_in_corso || 'Nessun farmaco in corso'}
+              </div>
+            )}
+          </div>
+
+          {/* Vaccini */}
+          <div style={{...glass,padding:'16px 18px'}}>
+            <div style={{...secLabel,marginBottom:10}}>💉 Vaccini</div>
+            {vaccini.length === 0 && !sanEdit && (
+              <div style={{fontSize:13,color:'var(--text-muted)'}}>Nessun vaccino registrato</div>
+            )}
+            {vaccini.map((v,i) => (
+              <div key={i} style={{...glassCard,padding:'10px 13px',marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:'var(--text-primary)'}}>{v.nome}</div>
+                  <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>
+                    {v.data_ultima && `Ultima: ${new Date(v.data_ultima).toLocaleDateString('it-IT')}`}
+                    {v.scadenza && ` · Scade: `}
+                    {v.scadenza && (
+                      <span style={{color: new Date(v.scadenza) < new Date() ? '#dc2626' : '#059669', fontWeight:600}}>
+                        {new Date(v.scadenza).toLocaleDateString('it-IT')}
+                        {new Date(v.scadenza) < new Date() ? ' ⚠️ SCADUTO' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {sanEdit && (
+                  <button onClick={()=>removeVaccino(i)} style={{background:'rgba(220,38,38,0.1)',border:'1px solid rgba(220,38,38,0.2)',
+                    borderRadius:8,padding:'4px 8px',cursor:'pointer',color:'#dc2626',fontSize:12}}>✕</button>
+                )}
+              </div>
+            ))}
+            {sanEdit && (
+              <div style={{...glassCard,padding:'12px 14px',marginTop:8}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--text-muted)',marginBottom:8}}>AGGIUNGI VACCINO</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
+                  <input placeholder="Nome vaccino" value={nuovoVacc.nome}
+                    onChange={e=>setNuovoVacc(p=>({...p,nome:e.target.value}))}
+                    style={{...inputStyle,fontSize:12}}/>
+                  <input type="date" placeholder="Data ultima" value={nuovoVacc.data_ultima}
+                    onChange={e=>setNuovoVacc(p=>({...p,data_ultima:e.target.value}))}
+                    style={{...inputStyle,fontSize:12}}/>
+                  <input type="date" placeholder="Scadenza" value={nuovoVacc.scadenza}
+                    onChange={e=>setNuovoVacc(p=>({...p,scadenza:e.target.value}))}
+                    style={{...inputStyle,fontSize:12}}/>
+                </div>
+                <button onClick={addVaccino} style={{...btnPrimary,width:'100%',padding:'9px',fontSize:13}}>
+                  + Aggiungi vaccino
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Veterinario */}
+          <div style={{...glass,padding:'16px 18px'}}>
+            <div style={{...secLabel,marginBottom:10}}>🩺 Veterinario di riferimento</div>
+            {sanEdit ? (
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <input placeholder="Nome veterinario o studio" value={sanForm.veterinario_nome}
+                  onChange={e=>setSanForm(p=>({...p,veterinario_nome:e.target.value}))}
+                  style={inputStyle}/>
+                <input type="tel" placeholder="Telefono" value={sanForm.veterinario_tel}
+                  onChange={e=>setSanForm(p=>({...p,veterinario_tel:e.target.value}))}
+                  style={inputStyle}/>
+              </div>
+            ) : (
+              <div style={{fontSize:13,color:'var(--text-primary)',lineHeight:1.8}}>
+                {animale.veterinario_nome ? (
+                  <>
+                    <div style={{fontWeight:600}}>{animale.veterinario_nome}</div>
+                    {animale.veterinario_tel && (
+                      <a href={'tel:'+animale.veterinario_tel}
+                        style={{color:'#2563eb',textDecoration:'none'}}>
+                        📞 {animale.veterinario_tel}
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <span style={{color:'var(--text-muted)'}}>Nessun veterinario registrato</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── STORICO VISITE ───────────────────────────────────── */}
+      {tab==='visite' && (
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {visiteLoding ? (
+            <div style={{textAlign:'center',padding:'40px 0',color:'var(--text-muted)',fontSize:13}}>
+              Caricamento visite...
+            </div>
+          ) : visite.length === 0 ? (
+            <div style={{...glass,padding:'40px 20px',textAlign:'center'}}>
+              <div style={{fontSize:36,marginBottom:12}}>📅</div>
+              <div style={{fontSize:15,fontWeight:600,color:'var(--text-primary)',marginBottom:6}}>
+                Nessuna visita registrata
+              </div>
+              <div style={{fontSize:13,color:'var(--text-secondary)'}}>
+                Le visite appariranno qui una volta completate
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Totale speso */}
+              <div style={{...glassCard,padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase'}}>
+                    Totale speso
+                  </div>
+                  <div style={{fontSize:22,fontWeight:800,color:'#2563eb',letterSpacing:'-0.5px'}}>
+                    € {visite.reduce((sum,v)=>{
+                      const p = v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0);
+                      return sum + p;
+                    }, 0).toFixed(2)}
+                  </div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase'}}>
+                    Visite totali
+                  </div>
+                  <div style={{fontSize:22,fontWeight:800,color:'var(--text-primary)',letterSpacing:'-0.5px'}}>
+                    {visite.length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista visite */}
+              {visite.map((v,i) => {
+                const coloreStato = {confermato:'#2563eb','in attesa':'#d97706',completato:'#059669',cancellato:'#dc2626'}[v.stato]||'#888';
+                const prezzo = v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0);
+                const servizi = (v.appuntamenti_servizi||[]).map(s=>s.servizi?.nome).filter(Boolean).join(', ');
+                return (
+                  <div key={v.id} style={{...glassCard,padding:'13px 15px'}}>
+                    <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
+                      {/* Data */}
+                      <div style={{flexShrink:0,textAlign:'center',minWidth:44}}>
+                        <div style={{fontSize:18,fontWeight:800,color:'var(--text-primary)',lineHeight:1}}>
+                          {new Date(v.inizio).getDate()}
+                        </div>
+                        <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.3px'}}>
+                          {new Date(v.inizio).toLocaleDateString('it-IT',{month:'short'})}
+                        </div>
+                        <div style={{fontSize:10,color:'var(--text-muted)'}}>
+                          {new Date(v.inizio).getFullYear()}
+                        </div>
+                      </div>
+                      {/* Barra colore */}
+                      <div style={{width:3,alignSelf:'stretch',borderRadius:99,background:coloreStato,flexShrink:0}}/>
+                      {/* Info */}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                          <span style={{fontSize:13,fontWeight:700,color:'var(--text-primary)'}}>
+                            {new Date(v.inizio).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}
+                            {v.fine && ` — ${new Date(v.fine).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`}
+                          </span>
+                          <span style={{fontSize:10,fontWeight:700,background:coloreStato+'18',color:coloreStato,
+                            padding:'2px 7px',borderRadius:20}}>{v.stato}</span>
+                        </div>
+                        {servizi && (
+                          <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:2,
+                            whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                            ✂️ {servizi}
+                          </div>
+                        )}
+                        {v.operatori?.nome && (
+                          <div style={{fontSize:11,color:'var(--text-muted)'}}>
+                            👤 {v.operatori.nome} {v.operatori.cognome||''}
+                          </div>
+                        )}
+                        {v.note && (
+                          <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:4,
+                            background:'var(--card-bg-sm)',borderRadius:8,padding:'6px 8px',
+                            fontStyle:'italic',lineHeight:1.4}}>
+                            "{v.note}"
+                          </div>
+                        )}
+                      </div>
+                      {/* Prezzo */}
+                      {prezzo > 0 && (
+                        <div style={{flexShrink:0,fontSize:14,fontWeight:800,color:'#059669'}}>
+                          € {prezzo.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
       )}
     </motion.div>

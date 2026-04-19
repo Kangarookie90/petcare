@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
+import { APP_VERSION, BUILD_DATE } from './version';
 import LoginView from './LoginView';
 import PetView from './PetView';
 import ClientiView from './ClientiView';
@@ -40,9 +41,8 @@ const NAV_ITEMS = [
     id: "home",
     label: "Home",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
-        <path d="M9 21V12h6v9" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 10.5L12 4l8 6.5V20a1.5 1.5 0 01-1.5 1.5h-4V15h-5v6.5H5A1.5 1.5 0 014 20v-9.5z"/>
       </svg>
     ),
   },
@@ -50,12 +50,10 @@ const NAV_ITEMS = [
     id: "calendario",
     label: "Calendario",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="3" />
-        <path d="M16 2v4M8 2v4M3 10h18" />
-        <circle cx="8" cy="16" r="1" fill="currentColor" />
-        <circle cx="12" cy="16" r="1" fill="currentColor" />
-        <circle cx="16" cy="16" r="1" fill="currentColor" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="16" rx="3"/>
+        <path d="M16 3v4M8 3v4M3 11h18"/>
+        <path d="M8 15h2M8 18h2M13 15h3M13 18h3"/>
       </svg>
     ),
   },
@@ -63,9 +61,10 @@ const NAV_ITEMS = [
     id: "prossimi",
     label: "Prossimi",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v5l3.5 3.5" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 7.5V12l3 3"/>
+        <path d="M17.5 4.5l.5.5"/>
       </svg>
     ),
   },
@@ -73,10 +72,11 @@ const NAV_ITEMS = [
     id: "clienti",
     label: "Clienti",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="9" cy="7" r="4" />
-        <path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2" />
-        <path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8.5" cy="7" r="3.5"/>
+        <path d="M2 20v-1.5A4.5 4.5 0 016.5 14h4A4.5 4.5 0 0115 18.5V20"/>
+        <path d="M16 3.5a3.5 3.5 0 010 7"/>
+        <path d="M20 20v-1a3.5 3.5 0 00-3.5-3.5"/>
       </svg>
     ),
   },
@@ -84,10 +84,12 @@ const NAV_ITEMS = [
     id: "pet",
     label: "Pet",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2C9 2 7 4 7 6.5c0 1.5.5 2.8 1.5 3.5C6 11 4 13.5 4 16.5 4 19.5 6.5 22 12 22s8-2.5 8-5.5c0-3-2-5.5-4.5-6.5C16.5 9.3 17 8 17 6.5 17 4 15 2 12 2z" />
-        <circle cx="9" cy="6" r="1" fill="currentColor" />
-        <circle cx="15" cy="6" r="1" fill="currentColor" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <ellipse cx="9" cy="5" rx="2" ry="3"/>
+        <ellipse cx="15" cy="5" rx="2" ry="3"/>
+        <ellipse cx="5" cy="12" rx="2.5" ry="3"/>
+        <ellipse cx="19" cy="12" rx="2.5" ry="3"/>
+        <path d="M12 10c-4 0-6 2.5-6 5 0 3.5 3 5 6 5s6-1.5 6-5c0-2.5-2-5-6-5z"/>
       </svg>
     ),
   },
@@ -95,8 +97,12 @@ const NAV_ITEMS = [
     id: "statistiche",
     label: "Statistiche",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 20V10M12 20V4M6 20v-6" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 20V14"/>
+        <path d="M9 20V9"/>
+        <path d="M14 20V12"/>
+        <path d="M19 20V5"/>
+        <path d="M4 11l5-5 5 4 5-5"/>
       </svg>
     ),
   },
@@ -104,9 +110,10 @@ const NAV_ITEMS = [
     id: "primanota",
     label: "Prima Nota",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-        <path d="M14 2v6h6M12 18v-6M9 15h6"/>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2.5H6A1.5 1.5 0 004.5 4v16A1.5 1.5 0 006 21.5h12A1.5 1.5 0 0019.5 20V8L14 2.5z"/>
+        <path d="M14 2.5V8H19.5"/>
+        <path d="M12 13v4M10 15h4"/>
       </svg>
     ),
   },
@@ -114,10 +121,12 @@ const NAV_ITEMS = [
     id: "operatori",
     label: "Operatori",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-        <path d="M12 11v4M10 13h4" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="6" r="3"/>
+        <path d="M7 21v-1a5 5 0 0110 0v1"/>
+        <path d="M8 11l-1 3h10l-1-3"/>
+        <path d="M10 11V9.5M14 11V9.5"/>
+        <rect x="10.5" y="14" width="3" height="2.5" rx="0.5"/>
       </svg>
     ),
   },
@@ -125,9 +134,9 @@ const NAV_ITEMS = [
     id: "profilo",
     label: "Profilo",
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="8" r="4" />
-        <path d="M6 20v-1a6 6 0 0112 0v1" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="3.5"/>
+        <path d="M5 20v-1a7 7 0 0114 0v1"/>
       </svg>
     ),
   },
@@ -339,7 +348,8 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showRicerca,    setShowRicerca]    = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
-  const [session, setSession] = useState(undefined); // undefined = caricamento, null = non loggato
+  const [showEasterEgg,  setShowEasterEgg]  = useState(false);
+  const [session, setSession] = useState(undefined);
 
   // ── Notifiche: DEVE stare qui, prima di qualsiasi return condizionale ──
   const { notifiche, nonLette, nuovaToast, marcaLette } = useNotifiche();
@@ -676,7 +686,8 @@ export default function App() {
       <div className="app-layout">
         {/* Sidebar */}
         <nav className={"sidebar" + (sidebarCollapsed ? " collapsed" : "")}>
-          <div className="sidebar-logo">
+          <div className="sidebar-logo" onClick={() => setShowEasterEgg(true)}
+            style={{ cursor: 'pointer' }} title="Il cuore di Nemora">
             <div className="logo-icon">
               <img src="/assets/nemora-icon-1024.svg" alt="Nemora" style={{ width: 38, height: 38, borderRadius: 10 }} />
             </div>
@@ -911,6 +922,85 @@ export default function App() {
       <AnimatePresence>
         {showRicerca && <RicercaGlobale onClose={() => setShowRicerca(false)} />}
       </AnimatePresence>
+
+      {/* ── Easter egg: Il cuore di Nemora ── */}
+      <AnimatePresence>
+        {showEasterEgg && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowEasterEgg(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 500,
+              background: 'rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 400,
+                background: 'rgba(255,255,255,0.72)',
+                border: '1px solid rgba(255,255,255,0.9)',
+                borderRadius: 28, padding: '36px 32px 32px',
+                boxShadow: '0 2px 0 rgba(255,255,255,0.95) inset, 0 20px 60px rgba(0,0,0,0.18)',
+                backdropFilter: 'blur(40px) saturate(1.8)', WebkitBackdropFilter: 'blur(40px) saturate(1.8)',
+              }}
+            >
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <img src="/assets/nemora-icon-1024.svg" alt="Nemora"
+                  style={{ width: 72, height: 72, borderRadius: 18, margin: '0 auto' }} />
+              </div>
+              <h2 style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+                Il cuore di Nemora
+              </h2>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 20px' }}>
+                Nemora non è solo un nome, è un tributo alla nostra famiglia. Nasce dall'intreccio delle anime che hanno vissuto e che vivono con noi.
+              </p>
+              <div style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.18)', borderRadius: 16, padding: '14px 16px', marginBottom: 16 }}>
+                <p style={{ margin: 0, fontSize: 13, color: '#0F6E56', lineHeight: 1.7 }}>
+                  Il nome affonda le sue radici nel termine latino <em>nemora</em> — i boschi, i luoghi sacri della natura — evocando rifugio, pace e rigenerazione.
+                </p>
+              </div>
+              {[
+                { titolo: 'Purezza', testo: 'Come un respiro nel bosco, un servizio che mette al centro il benessere naturale del tuo animale.' },
+                { titolo: 'Innovazione e Cura', testo: 'Tecnologia moderna e dedizione artigianale del grooming, in equilibrio perfetto.' },
+                { titolo: 'Identità', testo: 'Ogni lettera custodisce il nome di un compagno di vita, perché la cura deve sempre partire dal cuore.' },
+              ].map(({ titolo, testo }) => (
+                <div key={titolo} style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'flex-start' }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1D9E75', flexShrink: 0, marginTop: 6 }} />
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+                    <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{titolo}:</strong> {testo}
+                  </p>
+                </div>
+              ))}
+              <p style={{ textAlign: 'center', margin: '20px 0 8px', fontSize: 13, fontStyle: 'italic', color: '#1D9E75', letterSpacing: '0.2px' }}>
+                Dove la tecnologia incontra il benessere, ispirata da chi amiamo.
+              </p>
+              <p style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.3px' }}>
+                v{APP_VERSION} · {BUILD_DATE}
+              </p>
+              <button
+                onClick={() => setShowEasterEgg(false)}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 16,
+                  border: '1px solid rgba(29,158,117,0.3)',
+                  background: 'rgba(29,158,117,0.08)',
+                  color: '#0F6E56', fontSize: 14, fontWeight: 600,
+                  fontFamily: 'inherit', cursor: 'pointer',
+                }}
+              >
+                ✦ Chiudi
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
      <OfflineIndicator />
     </>
   );

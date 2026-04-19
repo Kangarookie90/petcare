@@ -12,12 +12,17 @@ import { supabase } from './supabaseClient';
 import { db } from './db';
 
 // ── Tabelle da sincronizzare ──────────────────────────────────
-const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi'];
+const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi', 'notifiche'];
 
-// ── Select con join per tabelle che hanno relazioni embedded ─
+// ── Select per tabelle con join o campi specifici ────────────
+// animali:      * include i nuovi campi sanitari (allergie, vaccini,
+//               farmaci_in_corso, veterinario_nome, veterinario_tel)
+// appuntamenti: * include note, reminder_inviato, reminder_giorni_prima
+// notifiche:    sola lettura — inserite dal webhook WhatsApp server-side
 const SELECT_MAP = {
   animali:      '*, razze(id, nome), clienti(id, nome, cognome)',
   appuntamenti: '*, clienti(nome, cognome), animali(nome, specie), operatori(id, nome, cognome, colore)',
+  notifiche:    'id, tipo, appuntamento_id, messaggio, telefono_cliente, letto, created_at',
 };
 
 // ── Stato connessione ─────────────────────────────────────────
