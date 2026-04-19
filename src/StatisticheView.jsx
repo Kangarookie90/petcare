@@ -377,7 +377,7 @@ function exportExcel(dati, appuntamenti, clienti, animali, meseLabel, sel) {
 
 // ── Export Excel con foglio Prima Nota ────────────────────────
 async function exportExcelConPrimaNota(dati, appuntamenti, clienti, animali, meseLabel, sel, dal, al) {
-  const { default: XLSX2 } = await import('xlsx');
+  const XLSX2 = XLSX; // usa l'import statico già presente
   const wb = XLSX2.utils.book_new();
 
   // Riepilogo
@@ -398,9 +398,8 @@ async function exportExcelConPrimaNota(dati, appuntamenti, clienti, animali, mes
 
   // Prima Nota reale
   if (sel?.primanota) {
-    const { createClient } = await import('@supabase/supabase-js');
-    // usa il client già disponibile nel modulo
-    const { data: movimenti } = await (await import('./supabaseClient')).supabase
+    // usa il client supabase già importato staticamente in cima al file
+    const { data: movimenti } = await supabase
       .from('primanota')
       .select('*, operatori(nome)')
       .gte('data', dal)
