@@ -520,7 +520,7 @@ export default function StatisticheView() {
     clienti:       true,
     animali:       true,
   });
-  const [exportPeriodo, setExportPeriodo] = useState('mese'); // 'mese' | 'custom'
+  const [exportPeriodo, setExportPeriodo] = useState('mese');
   const [exportDal, setExportDal]   = useState('');
   const [exportAl,  setExportAl]    = useState('');
   const [meseSel,      setMeseSel]      = useState(new Date().getMonth());
@@ -532,6 +532,12 @@ export default function StatisticheView() {
   const [servizi,      setServizi]      = useState([]);
   const [primanota,    setPrimanota]    = useState([]);
   const [apConf,       setApConf]       = useState([]);
+
+  // ── Backup / Ripristino ──────────────────────────────────────
+  const [backupLoading,  setBackupLoading]  = useState(false);
+  const [ripristinoStep, setRipristinoStep] = useState('idle'); // idle|confirm|uploading|done|error
+  const [ripristinoMsg,  setRipristinoMsg]  = useState('');
+  const [templateLoading,setTemplateLoading]= useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -564,6 +570,104 @@ export default function StatisticheView() {
     setPrimanota(pn.data || []);
     setApConf(apC.data || []);
     setLoading(false);
+  };
+
+  // ── Backup completo → Excel ───────────────────────────────
+  const scaricaBackup = async () => {
+    setBackupLoading(true);
+    try {
+      const [cl, an, op, sv, rz, ap, aps, pn, no] = await Promise.all([
+        supabase.from('clienti').select('*'),
+        supabase.from('animali').select('*'),
+        supabase.from('operatori').select('*'),
+        supabase.from('servizi').select('*'),
+        supabase.from('razze').select('*'),
+        supabase.from('appuntamenti').select('*'),
+        supabase.from('appuntamenti_servizi').select('*'),
+        supabase.from('primanota').select('*'),
+        supabase.from('notifiche').select('*'),
+      ]);
+
+      const wb = XLSX.utils.book_new();
+      const tabelle = [
+        { nome: 'clienti',              data: cl.data  || [] },
+        { nome: 'animali',              data: an.data  || [] },
+        { nome: 'operatori',            data: op.data  || [] },
+        { nome: 'servizi',              data: sv.data  || [] },
+        { nome: 'razze',                data: rz.data  || [] },
+        { nome: 'appuntamenti',         data: ap.data  || [] },
+        { nome: 'appuntamenti_servizi', data: aps.data || [] },
+        { nome: 'primanota',            data: pn.data  || [] },
+        { nome: 'notifiche',            data: no.data  || [] },
+      ];
+
+      tabelle.forEach(({ nome, data }) => {
+        const ws = data.length > 0
+          ? XLSX.utils.json_to_sheet(data)
+          : XLSX.utils.json_to_sheet([{}]);
+        XLSX.utils.book_append_sheet(wb, ws, nome);
+      });
+
+      const data = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `nemora_backup_${data}.xlsx`);
+    } catch (e) {
+      console.error('Backup fallito:', e);
+    }
+    setBackupLoading(false);
+  };
+
+  // ── Template vuoto per ripristino ────────────────────────
+  const scaricaTemplate = () => {
+    setTemplateLoading(true);
+    const wb = XLSX.utils.book_new();
+    const struttura = {
+      clienti:              ['id','nome','cognome','telefono','email','indirizzo','note','created_at'],
+      animali:              ['id','cliente_id','nome','specie','razza_id','colore','data_nascita','zone_critiche','note','operatore_preferito_id','created_at'],
+      operatori:            ['id','nome','cognome','colore','attivo'],
+      servizi:              ['id','nome','prezzo','durata_minuti'],
+      razze:                ['id','nome','specie'],
+      appuntamenti:         ['id','cliente_id','animale_id','operatore_id','inizio','fine','stato','note','prezzo_proposto','prezzo_confermato','prezzo_confermato_flag','metodo_pagamento','reminder_inviato','reminder_giorni_prima'],
+      appuntamenti_servizi: ['id','appuntamento_id','servizio_id','prezzo_applicato'],
+      primanota:            ['id','data','tipo','importo','descrizione','operatore_id','appuntamento_id'],
+      notifiche:            ['id','tipo','appuntamento_id','messaggio','telefono_cliente','letto','created_at'],
+    };
+    Object.entries(struttura).forEach(([nome, colonne]) => {
+      const ws = XLSX.utils.aoa_to_sheet([colonne]);
+      XLSX.utils.book_append_sheet(wb, ws, nome);
+    });
+    XLSX.writeFile(wb, 'nemora_template_ripristino.xlsx');
+    setTemplateLoading(false);
+  };
+
+  // ── Ripristino da Excel ───────────────────────────────────
+  const gestisciRipristino = async (file) => {
+    if (!file) return;
+    setRipristinoStep('uploading');
+    setRipristinoMsg('Lettura file in corso...');
+    try {
+      const buf = await file.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array' });
+      const tabelle = ['clienti','animali','operatori','servizi','razze','appuntamenti','appuntamenti_servizi','primanota'];
+      let totRighe = 0;
+
+      for (const nome of tabelle) {
+        if (!wb.SheetNames.includes(nome)) continue;
+        const ws   = wb.Sheets[nome];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+        if (rows.length === 0) continue;
+        setRipristinoMsg(`Ripristino ${nome} (${rows.length} righe)...`);
+        const { error } = await supabase.from(nome).upsert(rows, { onConflict: 'id' });
+        if (error) throw new Error(`Errore su ${nome}: ${error.message}`);
+        totRighe += rows.length;
+      }
+
+      setRipristinoStep('done');
+      setRipristinoMsg(`Ripristino completato — ${totRighe} record importati.`);
+      fetchAll();
+    } catch (e) {
+      setRipristinoStep('error');
+      setRipristinoMsg(e.message || 'Errore durante il ripristino.');
+    }
   };
 
   // ── Dati calcolati ────────────────────────────────────────
@@ -1228,6 +1332,95 @@ export default function StatisticheView() {
                   color={COLORI[i % COLORI.length]}
                 />
               ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+
+      {/* ── Backup & Ripristino ── */}
+      <motion.div variants={itemVariants} style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 14 }}>
+          Backup & Ripristino
+        </div>
+
+        {/* Backup */}
+        <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 18, padding: '18px 20px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 13, background: 'rgba(5,150,105,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Scarica backup</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Tutte le tabelle in un file Excel. Salva in un posto sicuro.</div>
+            </div>
+            <button onClick={scaricaBackup} disabled={backupLoading}
+              style={{ padding: '9px 18px', borderRadius: 12, border: 'none', background: '#059669', color: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', opacity: backupLoading ? 0.6 : 1, flexShrink: 0 }}>
+              {backupLoading ? '...' : 'Scarica'}
+            </button>
+          </div>
+        </div>
+
+        {/* Ripristino */}
+        <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 18, padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 13, background: 'rgba(217,119,6,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Ripristino dati</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Importa un file Excel. I dati esistenti vengono aggiornati (upsert).</div>
+            </div>
+          </div>
+
+          {/* Bottone template */}
+          <button onClick={scaricaTemplate} disabled={templateLoading}
+            style={{ width: '100%', padding: '10px', borderRadius: 12, border: '1px solid var(--card-border)', background: 'var(--card-bg-sm)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+            {templateLoading ? 'Download...' : 'Scarica template vuoto'}
+          </button>
+
+          {/* Upload file */}
+          {ripristinoStep === 'idle' && (
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '10px', borderRadius: 12, border: '2px dashed var(--card-border)', background: 'transparent', color: '#d97706', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              </svg>
+              Carica file Excel (.xlsx)
+              <input type="file" accept=".xlsx" style={{ display: 'none' }}
+                onChange={e => { if (e.target.files[0]) gestisciRipristino(e.target.files[0]); }} />
+            </label>
+          )}
+
+          {/* Stato ripristino */}
+          {ripristinoStep === 'uploading' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.2)' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
+                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3"/><path d="M21 12a9 9 0 00-9-9"/>
+              </svg>
+              <span style={{ fontSize: 13, color: '#d97706', fontWeight: 500 }}>{ripristinoMsg}</span>
+            </div>
+          )}
+          {ripristinoStep === 'done' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.2)' }}>
+              <span style={{ fontSize: 13, color: '#059669', fontWeight: 500 }}>{ripristinoMsg}</span>
+              <button onClick={() => setRipristinoStep('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#059669', fontFamily: 'inherit', fontWeight: 600 }}>Nuovo</button>
+            </div>
+          )}
+          {ripristinoStep === 'error' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
+              <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>{ripristinoMsg}</span>
+              <button onClick={() => setRipristinoStep('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#dc2626', fontFamily: 'inherit', fontWeight: 600 }}>Riprova</button>
             </div>
           )}
         </div>

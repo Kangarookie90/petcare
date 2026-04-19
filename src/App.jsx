@@ -13,6 +13,7 @@ import PrimanotaView from './PrimanotaView';
 import ProssimiView from './ProssimiView';
 import RicercaGlobale from './RicercaGlobale';
 import ProfiloView from './ProfiloView';
+import SocialView from './SocialView';
 import {
   useNotifiche,
   NotificaToast,
@@ -140,6 +141,18 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    id: "social",
+    label: "Social",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="18" cy="5" r="3"/>
+        <circle cx="6" cy="12" r="3"/>
+        <circle cx="18" cy="19" r="3"/>
+        <path d="M8.7 10.7l6.6-3.4M8.7 13.3l6.6 3.4"/>
+      </svg>
+    ),
+  },
 ];
 
 
@@ -147,14 +160,16 @@ const NAV_ITEMS = [
 function HomeView() {
   const [dati, setDati] = useState({ operatori: [], appuntamenti: [], totaleOggi: 0, inAttesa: 0, totaleClienti: 0 });
   const [loading, setLoading] = useState(true);
+  const [inattivi, setInattivi] = useState([]);
 
   useEffect(() => {
     const load = async () => {
       const oggi = new Date();
       const inizioGiorno = new Date(oggi.setHours(0,0,0,0)).toISOString();
       const fineGiorno   = new Date(oggi.setHours(23,59,59,999)).toISOString();
+      const soglia60     = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
-      const [opRes, apRes, clRes] = await Promise.all([
+      const [opRes, apRes, clRes, apTuttiRes] = await Promise.all([
         supabase.from("operatori").select("id,nome,cognome,colore").eq("attivo", true).order("nome"),
         supabase.from("appuntamenti").select(`
           id, inizio, fine, stato,
@@ -164,11 +179,27 @@ function HomeView() {
           appuntamenti_servizi(servizi(nome))
         `).gte("inizio", inizioGiorno).lte("inizio", fineGiorno).order("inizio"),
         supabase.from("clienti").select("id", { count: "exact", head: true }),
+        supabase.from("appuntamenti").select("id, inizio, clienti(id, nome, cognome, telefono), animali(nome)").order("inizio", { ascending: false }),
       ]);
 
       const ops = opRes.data || [];
       const aps = apRes.data || [];
       const maxAp = Math.max(...ops.map(op => aps.filter(a => a.operatori?.id === op.id).length), 1);
+
+      // Calcola clienti inattivi da >60 giorni
+      const tuttiAp = apTuttiRes.data || [];
+      const ultimoPerCliente = {};
+      tuttiAp.forEach(a => {
+        const cid = a.clienti?.id;
+        if (!cid) return;
+        if (!ultimoPerCliente[cid] || new Date(a.inizio) > new Date(ultimoPerCliente[cid].inizio)) {
+          ultimoPerCliente[cid] = a;
+        }
+      });
+      const listaInattivi = Object.values(ultimoPerCliente)
+        .filter(a => new Date(a.inizio) < new Date(soglia60))
+        .sort((a, b) => new Date(a.inizio) - new Date(b.inizio));
+      setInattivi(listaInattivi);
 
       setDati({
         operatori: ops.map(op => ({
@@ -326,6 +357,63 @@ function HomeView() {
           );
         })}
       </motion.div>
+
+      {/* ── Clienti inattivi da >60 giorni ── */}
+      {inattivi.length > 0 && (
+        <motion.div variants={itemVariants} style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#d97706' }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+              Clienti inattivi — oltre 60 giorni
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(217,119,6,0.12)', color: '#d97706', padding: '2px 8px', borderRadius: 20 }}>
+              {inattivi.length}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {inattivi.map((a) => {
+              const giorni = Math.floor((Date.now() - new Date(a.inizio).getTime()) / (1000 * 60 * 60 * 24));
+              const tel = a.clienti?.telefono;
+              return (
+                <motion.div key={a.id}
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 16, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Avatar */}
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(217,119,6,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>
+                    🐾
+                  </div>
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
+                      {a.clienti?.nome} {a.clienti?.cognome}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {a.animali?.nome && <span>🐶 {a.animali.nome}</span>}
+                      <span>Ultimo: {new Date(a.inizio).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                  {/* Giorni + contatta */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: giorni > 120 ? '#dc2626' : '#d97706', background: giorni > 120 ? 'rgba(220,38,38,0.1)' : 'rgba(217,119,6,0.1)', padding: '2px 8px', borderRadius: 20 }}>
+                      {giorni}gg
+                    </span>
+                    {tel && (
+                      <a href={`tel:${tel}`}
+                        style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', background: 'rgba(37,99,235,0.08)', padding: '4px 10px', borderRadius: 10, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.12 1.18 2 2 0 012.11 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l.45-.45a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                        </svg>
+                        Chiama
+                      </a>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
     </motion.div>
   );
 }
@@ -425,6 +513,7 @@ export default function App() {
       case "statistiche":  return <StatisticheView key="statistiche" />;
       case "primanota":    return <PrimanotaView key="primanota" />;
       case "profilo":      return <ProfiloView key="profilo" />;
+      case "social":       return <SocialView key="social" />;
       default:           return null;
     }
   };
