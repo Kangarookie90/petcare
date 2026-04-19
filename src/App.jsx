@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { APP_VERSION, BUILD_DATE } from './version';
 import LoginView from './LoginView';
@@ -1003,6 +1004,7 @@ export default function App() {
       </AnimatePresence>
 
      <OfflineIndicator />
+     <Analytics />
     </>
   );
 }
