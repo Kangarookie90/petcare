@@ -1,6 +1,6 @@
 /**
  * api/social.js — Vercel Serverless Function
- * Proxy per Google Gemini 1.5 Flash (gratuito)
+ * Proxy per Google Gemini 2.0 Flash
  *
  * Setup variabile d'ambiente su Vercel:
  *   GEMINI_API_KEY = AIza...
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
 
   try {
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
