@@ -435,6 +435,7 @@ export default function App() {
   const [navHidden, setNavHidden] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showRicerca,    setShowRicerca]    = useState(false);
+  const [pendingPetId,   setPendingPetId]   = useState(null);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [showEasterEgg,  setShowEasterEgg]  = useState(false);
   const [session, setSession] = useState(undefined);
@@ -466,6 +467,12 @@ export default function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Forza resize su FullCalendar dopo la transizione sidebar (310ms = durata CSS)
+  useEffect(() => {
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 310);
+    return () => clearTimeout(t);
+  }, [sidebarCollapsed]);
 
   // Loading iniziale mentre Supabase verifica la sessione
   if (session === undefined) {
@@ -507,8 +514,8 @@ export default function App() {
       case "home":       return <HomeView key="home" />;
       case "calendario": return <CalendarioView />;
       case "prossimi":   return <ProssimiView key="prossimi" />;
-      case "clienti":    return <ClientiView key="clienti" />;
-      case "pet":        return <PetView key="pet" />;
+      case "clienti":    return <ClientiView key="clienti" onNavigateToPet={(id) => { setPendingPetId(id); setActive('pet'); }} />;
+      case "pet":        return <PetView key="pet" initialPetId={pendingPetId} onPetOpened={() => setPendingPetId(null)} />;
       case "operatori":    return <OperatoriView key="operatori" />;
       case "statistiche":  return <StatisticheView key="statistiche" />;
       case "primanota":    return <PrimanotaView key="primanota" />;
@@ -741,9 +748,14 @@ export default function App() {
           max-width: 440px;
           backdrop-filter: blur(40px) saturate(2);
           -webkit-backdrop-filter: blur(40px) saturate(2);
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
         }
+        .bottom-nav::-webkit-scrollbar { display: none; }
         .nav-item {
-          flex: 1;
+          flex: 0 0 auto;
+          min-width: 52px;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -1010,7 +1022,7 @@ export default function App() {
 
       {/* Ricerca globale overlay */}
       <AnimatePresence>
-        {showRicerca && <RicercaGlobale onClose={() => setShowRicerca(false)} />}
+        {showRicerca && <RicercaGlobale onClose={() => setShowRicerca(false)} onNavigate={(id) => { setActive(id); }} />}
       </AnimatePresence>
 
       {/* ── Easter egg: Il cuore di Nemora ── */}

@@ -1338,7 +1338,7 @@ export default function StatisticheView() {
       </motion.div>
 
       {/* ── Backup & Ripristino ── */}
-      <motion.div variants={itemVariants} style={{ marginTop: 24 }}>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ marginTop: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 14 }}>
           Backup & Ripristino
         </div>

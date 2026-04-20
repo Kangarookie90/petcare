@@ -96,17 +96,14 @@ Rispondi SOLO con un oggetto JSON valido, senza testo aggiuntivo, senza backtick
 {"posts": ["testo post 1", "testo post 2", "testo post 3"]}`;
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/social', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
+        body: JSON.stringify({ prompt }),
       });
       const data = await res.json();
-      const text = data.content?.map(c => c.text || '').join('');
+      if (!res.ok) throw new Error(data.error || 'Errore server');
+      const text  = data.text || '';
       const clean = text.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(clean);
       setPosts(parsed.posts || []);

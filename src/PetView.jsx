@@ -503,6 +503,65 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const [fotoError,       setFotoError]       = useState('');
   const fotoInputRef = useRef(null);
 
+  // ── Modifica scheda completa ──
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nome:         animale.nome         || '',
+    specie:       animale.specie       || 'cane',
+    razza_id:     animale.razza_id     || '',
+    data_nascita: animale.data_nascita || '',
+    colore:       animale.colore       || '',
+    note:         animale.note         || '',
+  });
+  const [editFormRazze, setEditFormRazze] = useState([]);
+  const [savingEdit,    setSavingEdit]    = useState(false);
+  const [editError,     setEditError]     = useState('');
+
+  // Carica razze per il modal di modifica
+  useEffect(() => {
+    supabase.from('razze').select('id,nome,specie').order('nome')
+      .then(({ data }) => setEditFormRazze(data || []));
+  }, []);
+
+  const saveEditForm = async () => {
+    if (!editForm.nome.trim()) { setEditError('Il nome è obbligatorio'); return; }
+    setSavingEdit(true); setEditError('');
+    const updates = {
+      nome:         editForm.nome.trim(),
+      specie:       editForm.specie,
+      razza_id:     editForm.razza_id || null,
+      data_nascita: editForm.data_nascita || null,
+      colore:       editForm.colore.trim() || null,
+      note:         editForm.note.trim() || null,
+    };
+    const { error } = await supabase.from('animali').update(updates).eq('id', animale.id);
+    setSavingEdit(false);
+    if (error) { setEditError(error.message); return; }
+    onUpdate({ ...animale, ...updates });
+    setShowEditModal(false);
+  };
+
+  // ── Deceduto ──
+  const [savingDeceduto, setSavingDeceduto] = useState(false);
+
+  const toggleDeceduto = async () => {
+    const isDeceduto = !!animale.data_decesso;
+    if (isDeceduto) {
+      if (!window.confirm('Rimuovere la segnalazione di decesso?')) return;
+      setSavingDeceduto(true);
+      await supabase.from('animali').update({ data_decesso: null }).eq('id', animale.id);
+      onUpdate({ ...animale, data_decesso: null });
+    } else {
+      const dataDecesso = window.prompt('Data del decesso (lascia vuoto per oggi):', new Date().toISOString().split('T')[0]);
+      if (dataDecesso === null) return; // annullato
+      setSavingDeceduto(true);
+      const data = dataDecesso.trim() || new Date().toISOString().split('T')[0];
+      await supabase.from('animali').update({ data_decesso: data }).eq('id', animale.id);
+      onUpdate({ ...animale, data_decesso: data });
+    }
+    setSavingDeceduto(false);
+  };
+
   // ── Storico visite ──
   const [visite,        setVisite]        = useState([]);
   const [visiteLoding,  setVisiteLoading] = useState(false);
@@ -648,12 +707,34 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
 
   return (
     <motion.div style={{width:'100%'}}>
-      <div style={{marginBottom:14}}>
+      <div style={{marginBottom:14, display:'flex', gap:8, alignItems:'center'}}>
         <button onClick={onBack} style={{...btnSecondary,padding:'8px 14px',fontSize:13}}>← Indietro</button>
+        <button
+          onClick={() => { setEditForm({ nome: animale.nome||'', specie: animale.specie||'cane', razza_id: animale.razza_id||'', data_nascita: animale.data_nascita||'', colore: animale.colore||'', note: animale.note||'' }); setEditError(''); setShowEditModal(true); }}
+          style={{...btnSecondary, padding:'8px 14px', fontSize:13, display:'flex', alignItems:'center', gap:6}}>
+          ✏️ Modifica scheda
+        </button>
+        <button
+          onClick={toggleDeceduto}
+          disabled={savingDeceduto}
+          style={{
+            padding:'8px 14px', fontSize:13, borderRadius:13, cursor:'pointer', fontFamily:'inherit',
+            border: animale.data_decesso ? '1px solid rgba(220,38,38,0.4)' : '1px solid rgba(100,100,100,0.3)',
+            background: animale.data_decesso ? 'rgba(220,38,38,0.1)' : 'var(--input-bg)',
+            color: animale.data_decesso ? '#dc2626' : 'var(--text-muted)',
+            fontWeight:600, opacity: savingDeceduto ? 0.6 : 1,
+          }}>
+          {animale.data_decesso ? `🕊️ Deceduto ${new Date(animale.data_decesso).toLocaleDateString('it-IT')}` : '🕊️ Segna deceduto'}
+        </button>
       </div>
 
       {/* Header card */}
-      <div style={{...glass,padding:'18px 20px',marginBottom:14,display:'flex',alignItems:'center',gap:14}}>
+      <div style={{...glass,padding:'18px 20px',marginBottom:14,display:'flex',alignItems:'center',gap:14, opacity: animale.data_decesso ? 0.75 : 1}}>
+        {animale.data_decesso && (
+          <div style={{position:'absolute', top:0, left:0, right:0, background:'rgba(220,38,38,0.1)', border:'1px solid rgba(220,38,38,0.2)', borderRadius:'20px 20px 0 0', padding:'6px 16px', fontSize:12, fontWeight:600, color:'#dc2626', textAlign:'center'}}>
+            🕊️ Deceduto il {new Date(animale.data_decesso).toLocaleDateString('it-IT')}
+          </div>
+        )}
         {/* Avatar — foto o emoji */}
         <div style={{position:'relative', flexShrink:0}}>
           <div
@@ -1156,11 +1237,105 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
         </div>
       )}
     </motion.div>
+
+      {/* ── MODALE MODIFICA SCHEDA ─────────────────────────────── */}
+      <AnimatePresence>
+        {showEditModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position:'fixed', inset:0, zIndex:300, background:'rgba(10,24,64,0.45)',
+              backdropFilter:'blur(10px)', WebkitBackdropFilter:'blur(10px)',
+              display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+            onClick={e => e.target===e.currentTarget && setShowEditModal(false)}>
+            <motion.div
+              initial={{ opacity:0, y:24, scale:0.97 }}
+              animate={{ opacity:1, y:0, scale:1 }}
+              exit={{ opacity:0, y:12, scale:0.98 }}
+              transition={{ type:'spring', stiffness:380, damping:28 }}
+              style={{...glass, padding:24, width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto'}}>
+              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20}}>
+                <div style={{fontSize:18, fontWeight:700, color:'var(--text-primary)'}}>✏️ Modifica scheda</div>
+                <button onClick={() => setShowEditModal(false)} style={{background:'var(--card-bg-sm)', border:'1px solid rgba(255,255,255,0.7)', borderRadius:10, width:32, height:32, cursor:'pointer', fontSize:18, color:'var(--text-secondary)', fontFamily:'inherit'}}>×</button>
+              </div>
+
+              <div style={{display:'flex', flexDirection:'column', gap:13}}>
+                <div>
+                  <div style={secLabel}>Nome *</div>
+                  <input type="text" value={editForm.nome}
+                    onChange={e => setEditForm(p=>({...p, nome:e.target.value}))}
+                    style={inputStyle} placeholder="Nome animale" />
+                </div>
+
+                <div>
+                  <div style={secLabel}>Specie</div>
+                  <div style={{display:'flex', gap:8}}>
+                    {['cane','gatto','altro'].map(s => (
+                      <button key={s} onClick={() => setEditForm(p=>({...p, specie:s, razza_id:''}))} style={{
+                        flex:1, padding:'9px', borderRadius:12, cursor:'pointer', fontFamily:'inherit',
+                        fontSize:13, fontWeight:600, border:'1px solid rgba(255,255,255,0.8)',
+                        background: editForm.specie===s ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.3)',
+                        color: editForm.specie===s ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        boxShadow: editForm.specie===s ? '0 2px 0 rgba(255,255,255,0.9) inset' : 'none',
+                      }}>{specieEmoji(s)} {s.charAt(0).toUpperCase()+s.slice(1)}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {editFormRazze.filter(r => r.specie === editForm.specie).length > 0 && (
+                  <div>
+                    <div style={secLabel}>Razza</div>
+                    <select value={editForm.razza_id}
+                      onChange={e => setEditForm(p=>({...p, razza_id:e.target.value}))}
+                      style={{...inputStyle}}>
+                      <option value="">— Nessuna razza —</option>
+                      {editFormRazze.filter(r => r.specie === editForm.specie).map(r => (
+                        <option key={r.id} value={r.id}>{r.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <div style={secLabel}>Data di nascita</div>
+                  <input type="date" value={editForm.data_nascita}
+                    onChange={e => setEditForm(p=>({...p, data_nascita:e.target.value}))}
+                    style={inputStyle} />
+                </div>
+
+                <div>
+                  <div style={secLabel}>Colore mantello</div>
+                  <input type="text" value={editForm.colore}
+                    onChange={e => setEditForm(p=>({...p, colore:e.target.value}))}
+                    style={inputStyle} placeholder="Es. nero, bianco, fulvo..." />
+                </div>
+
+                <div>
+                  <div style={secLabel}>Note generali</div>
+                  <textarea rows={3} value={editForm.note}
+                    onChange={e => setEditForm(p=>({...p, note:e.target.value}))}
+                    style={{...inputStyle, resize:'vertical'}}
+                    placeholder="Carattere, abitudini, altro..." />
+                </div>
+              </div>
+
+              {editError && (
+                <div style={{fontSize:13, color:'#dc2626', margin:'12px 0', padding:'8px 12px',
+                  background:'rgba(239,68,68,0.08)', borderRadius:10}}>{editError}</div>
+              )}
+
+              <div style={{display:'flex', gap:10, marginTop:18}}>
+                <button onClick={() => setShowEditModal(false)} style={{...btnSecondary, flex:1}}>Annulla</button>
+                <button onClick={saveEditForm} disabled={savingEdit}
+                  style={{...btnPrimary, flex:2, opacity:savingEdit?0.7:1}}>
+                  {savingEdit ? 'Salvataggio...' : '✓ Salva modifiche'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
   );
 }
-
-// ─────────────────────────────────────────────────────────────
-// LISTA ANIMALI
 // ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 20;
 
@@ -1292,7 +1467,7 @@ function ListaAnimali({ animali, loading, onSelect, onAdd }) {
 // ─────────────────────────────────────────────────────────────
 // EXPORT PRINCIPALE
 // ─────────────────────────────────────────────────────────────
-export default function PetView() {
+export default function PetView({ initialPetId, onPetOpened }) {
   const [animali,   setAnimali]   = useState([]);
   const [clienti,   setClienti]   = useState([]);
   const [operatori, setOperatori] = useState([]);
@@ -1302,6 +1477,13 @@ export default function PetView() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
+
+  // Apri automaticamente l'animale richiesto da ClientiView
+  useEffect(() => {
+    if (!initialPetId || animali.length === 0) return;
+    const target = animali.find(a => a.id === initialPetId);
+    if (target) { setSelected(target); onPetOpened?.(); }
+  }, [initialPetId, animali]);
 
   const fetchAll = async () => {
     setLoading(true);

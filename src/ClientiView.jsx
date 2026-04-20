@@ -436,13 +436,84 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
 // ─────────────────────────────────────────────────────────────
 // SCHEDA CLIENTE
 // ─────────────────────────────────────────────────────────────
-function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
+function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack, onNavigateToPet, onDelete }) {
   const [animali, setAnimali] = useState([]);
   const [loadingAnimali, setLoadingAnimali] = useState(true);
   const [editing, setEditing] = useState(null);
   const [editVal, setEditVal] = useState('');
   const [saving, setSaving] = useState(false);
   const [showAddPet, setShowAddPet] = useState(false);
+
+  // ── Modifica scheda completa ──
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nome:             cliente.nome             || '',
+    cognome:          cliente.cognome          || '',
+    telefono:         cliente.telefono         || '',
+    email:            cliente.email            || '',
+    indirizzo:        cliente.indirizzo        || '',
+    note:             cliente.note             || '',
+    prezzo_riservato: cliente.prezzo_riservato || '',
+  });
+  const [savingEdit,  setSavingEdit]  = useState(false);
+  const [editError,   setEditError]   = useState('');
+
+  // ── Elimina cliente ──
+  const [deleting, setDeleting] = useState(false);
+
+  const openEditModal = () => {
+    setEditForm({
+      nome:             cliente.nome             || '',
+      cognome:          cliente.cognome          || '',
+      telefono:         cliente.telefono         || '',
+      email:            cliente.email            || '',
+      indirizzo:        cliente.indirizzo        || '',
+      note:             cliente.note             || '',
+      prezzo_riservato: cliente.prezzo_riservato || '',
+    });
+    setEditError('');
+    setShowEditModal(true);
+  };
+
+  const saveEditForm = async () => {
+    if (!editForm.nome.trim() || !editForm.cognome.trim()) {
+      setEditError('Nome e cognome sono obbligatori'); return;
+    }
+    setSavingEdit(true); setEditError('');
+    const updates = {
+      nome:             editForm.nome.trim(),
+      cognome:          editForm.cognome.trim(),
+      telefono:         editForm.telefono.trim()  || null,
+      email:            editForm.email.trim()     || null,
+      indirizzo:        editForm.indirizzo.trim() || null,
+      note:             editForm.note.trim()      || null,
+      prezzo_riservato: editForm.prezzo_riservato !== '' ? Number(editForm.prezzo_riservato) : null,
+    };
+    const { error } = await supabase.from('clienti').update(updates).eq('id', cliente.id);
+    setSavingEdit(false);
+    if (error) { setEditError(error.message); return; }
+    onUpdate({ ...cliente, ...updates });
+    setShowEditModal(false);
+  };
+
+  const handleDelete = async () => {
+    // Avviso se il cliente ha animali
+    if (animali.length > 0) {
+      const ok = window.confirm(
+        `Attenzione: questo cliente ha ${animali.length} animale/i registrato/i.\n` +
+        `Eliminando il cliente verranno eliminati anche tutti i suoi animali e i relativi appuntamenti.\n\n` +
+        `Sei sicuro di voler procedere?`
+      );
+      if (!ok) return;
+    } else {
+      const ok = window.confirm(`Eliminare definitivamente ${cliente.cognome} ${cliente.nome}?\nL'operazione non è reversibile.`);
+      if (!ok) return;
+    }
+    setDeleting(true);
+    await supabase.from('clienti').delete().eq('id', cliente.id);
+    setDeleting(false);
+    onDelete(cliente.id);
+  };
 
   useEffect(() => { fetchAnimali(); }, [cliente.id]);
 
@@ -478,9 +549,23 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
 
   return (
     <div style={{ width: '100%' }}>
-      {/* Back */}
-      <div style={{ marginBottom: 14 }}>
+      {/* Back + Azioni */}
+      <div style={{ marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>← Indietro</button>
+        <button onClick={openEditModal} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          ✏️ Modifica scheda
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          style={{
+            padding: '8px 14px', fontSize: 13, borderRadius: 13, cursor: 'pointer', fontFamily: 'inherit',
+            border: '1px solid rgba(220,38,38,0.35)', background: 'rgba(220,38,38,0.07)',
+            color: '#dc2626', fontWeight: 600, opacity: deleting ? 0.6 : 1,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+          🗑️ {deleting ? 'Eliminazione...' : 'Elimina cliente'}
+        </button>
       </div>
 
       {/* Header cliente */}
@@ -583,7 +668,10 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {animali.map(a => (
-              <div key={a.id} style={{ ...glassCard, display: 'flex', alignItems: 'center', gap: 13, padding: '13px 15px' }}>
+              <div
+                key={a.id}
+                onClick={() => onNavigateToPet && onNavigateToPet(a.id)}
+                style={{ ...glassCard, display: 'flex', alignItems: 'center', gap: 13, padding: '13px 15px', cursor: onNavigateToPet ? 'pointer' : 'default' }}>
                 <div style={{
                   width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
                   background: 'linear-gradient(145deg,rgba(90,171,255,0.2),rgba(32,96,221,0.12))',
@@ -624,6 +712,100 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack }) {
           onSaved={(pet) => { handlePetAdded(pet); setShowAddPet(false); }}
         />
       )}
+
+      {/* ── MODALE MODIFICA CLIENTE ────────────────────────── */}
+      <AnimatePresence>
+        {showEditModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(10,24,64,0.45)',
+              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            onClick={e => e.target === e.currentTarget && setShowEditModal(false)}>
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+              style={{ ...glass, padding: 24, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto' }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>✏️ Modifica cliente</div>
+                <button onClick={() => setShowEditModal(false)} style={{ background: 'var(--card-bg-sm)', border: '1px solid rgba(255,255,255,0.7)', borderRadius: 10, width: 32, height: 32, cursor: 'pointer', fontSize: 18, color: 'var(--text-secondary)', fontFamily: 'inherit' }}>×</button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <div style={secLabel}>Cognome *</div>
+                    <input type="text" value={editForm.cognome}
+                      onChange={e => setEditForm(p => ({ ...p, cognome: e.target.value }))}
+                      style={inputStyle} placeholder="Cognome" />
+                  </div>
+                  <div>
+                    <div style={secLabel}>Nome *</div>
+                    <input type="text" value={editForm.nome}
+                      onChange={e => setEditForm(p => ({ ...p, nome: e.target.value }))}
+                      style={inputStyle} placeholder="Nome" />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={secLabel}>📱 Telefono</div>
+                  <input type="tel" value={editForm.telefono}
+                    onChange={e => setEditForm(p => ({ ...p, telefono: e.target.value }))}
+                    style={inputStyle} placeholder="Es. 333 1234567" />
+                </div>
+
+                <div>
+                  <div style={secLabel}>📧 Email</div>
+                  <input type="email" value={editForm.email}
+                    onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
+                    style={inputStyle} placeholder="Es. mario@email.com" />
+                </div>
+
+                <div>
+                  <div style={secLabel}>📍 Indirizzo</div>
+                  <input type="text" value={editForm.indirizzo}
+                    onChange={e => setEditForm(p => ({ ...p, indirizzo: e.target.value }))}
+                    style={inputStyle} placeholder="Via, città..." />
+                </div>
+
+                <div>
+                  <div style={secLabel}>💰 Prezzo riservato</div>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
+                    <input type="number" min="0" step="0.50" value={editForm.prezzo_riservato}
+                      onChange={e => setEditForm(p => ({ ...p, prezzo_riservato: e.target.value }))}
+                      style={{ ...inputStyle, paddingLeft: 26 }} placeholder="Lascia vuoto per prezzo standard" />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={secLabel}>📝 Note</div>
+                  <textarea rows={3} value={editForm.note}
+                    onChange={e => setEditForm(p => ({ ...p, note: e.target.value }))}
+                    style={{ ...inputStyle, resize: 'vertical' }}
+                    placeholder="Note interne sul cliente..." />
+                </div>
+              </div>
+
+              {editError && (
+                <div style={{ fontSize: 13, color: '#dc2626', margin: '12px 0', padding: '8px 12px',
+                  background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>{editError}</div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button onClick={() => setShowEditModal(false)} style={{ ...btnSecondary, flex: 1 }}>Annulla</button>
+                <button onClick={saveEditForm} disabled={savingEdit}
+                  style={{ ...btnPrimary, flex: 2, opacity: savingEdit ? 0.7 : 1 }}>
+                  {savingEdit ? 'Salvataggio...' : '✓ Salva modifiche'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -753,7 +935,7 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
 // ─────────────────────────────────────────────────────────────
 // EXPORT PRINCIPALE
 // ─────────────────────────────────────────────────────────────
-export default function ClientiView() {
+export default function ClientiView({ onNavigateToPet }) {
   const [clienti,   setClienti]   = useState([]);
   const [razze,     setRazze]     = useState([]);
   const [operatori, setOperatori] = useState([]);
@@ -797,6 +979,11 @@ export default function ClientiView() {
     setSelected(c);
   };
 
+  const handleClienteDelete = (id) => {
+    setClienti(prev => prev.filter(x => x.id !== id));
+    setSelected(null);
+  };
+
   if (selected) {
     return (
       <SchedaCliente
@@ -805,6 +992,8 @@ export default function ClientiView() {
         operatori={operatori}
         onUpdate={handleClienteUpdate}
         onBack={() => setSelected(null)}
+        onNavigateToPet={onNavigateToPet}
+        onDelete={handleClienteDelete}
       />
     );
   }
