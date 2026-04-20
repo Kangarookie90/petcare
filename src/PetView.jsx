@@ -706,6 +706,7 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const opPref = operatori.find(o => o.id === animale.operatore_preferito_id);
 
   return (
+    <>
     <motion.div style={{width:'100%'}}>
       <div style={{marginBottom:14, display:'flex', gap:8, alignItems:'center'}}>
         <button onClick={onBack} style={{...btnSecondary,padding:'8px 14px',fontSize:13}}>← Indietro</button>
@@ -1334,6 +1335,7 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
           </motion.div>
         )}
       </AnimatePresence>
+    </>
   );
 }
 // ─────────────────────────────────────────────────────────────
