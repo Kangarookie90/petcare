@@ -47,3 +47,86 @@ body {
   overscroll-behavior-x: none;
   max-width: 100vw;
 }
+#root {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* ── Tablet font scaling (640px–1024px) ── */
+@media (min-width: 640px) and (max-width: 1024px) {
+  html { font-size: 15px; }
+  .sidebar-item { font-size: 15px !important; }
+  .sidebar-label { font-size: 15px !important; }
+}
+
+/* ── Bottom nav: fix layout su mobile ── */
+@media (max-width: 639px) {
+  /* Impedisce overflow orizzontale da qualsiasi figlio */
+  .app-layout,
+  .main {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* La nav occupa tutta la larghezza dello schermo, incollata in basso */
+  .bottom-nav {
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    /* Safe area iPhone con notch/home indicator */
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+
+  /* La riga principale occupa tutto e distribuisce le voci in modo uniforme */
+  .bottom-nav-row {
+    width: 100%;
+    display: flex;
+    gap: 0;
+    padding: 6px 4px 2px;
+  }
+
+  /* Il cassetto extra usa la stessa logica */
+  .bottom-nav-drawer {
+    padding: 2px 4px 6px;
+    gap: 0;
+  }
+
+  /* Ogni voce naviga in modo uniforme senza min-width fisso */
+  .nav-item {
+    flex: 1;
+    min-width: 0 !important;      /* sovrascrive il min-width: 52px che faceva overflow */
+    padding: 8px 2px !important;
+    border-radius: 12px;
+  }
+
+  /* Testo voci: si accorcia se non entra */
+  .nav-item span {
+    font-size: 9px !important;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  /* Icone leggermente più piccole su schermi stretti */
+  .nav-item svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  /* Il main deve avere padding-bottom uguale all'altezza della nav
+     (circa 68px + safe area) così il contenuto non finisce sotto */
+  .main {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .main.nav-hidden {
+    padding-bottom: 16px !important;
+  }
+}
