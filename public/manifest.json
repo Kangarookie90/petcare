@@ -1,0 +1,18 @@
+{
+  "name": "Nemora",
+  "short_name": "Nemora",
+  "description": "Gestionale per salone di toelettatura",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1628",
+  "theme_color": "#0c1628",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/nemora-icon-1024.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

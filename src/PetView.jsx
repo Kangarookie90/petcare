@@ -1147,94 +1147,214 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
                 Le visite appariranno qui una volta completate
               </div>
             </div>
-          ) : (
-            <>
-              {/* Totale speso */}
-              <div style={{...glassCard,padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase'}}>
-                    Totale speso
-                  </div>
-                  <div style={{fontSize:22,fontWeight:800,color:'#2563eb',letterSpacing:'-0.5px'}}>
-                    € {visite.reduce((sum,v)=>{
-                      const p = v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0);
-                      return sum + p;
-                    }, 0).toFixed(2)}
-                  </div>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase'}}>
-                    Visite totali
-                  </div>
-                  <div style={{fontSize:22,fontWeight:800,color:'var(--text-primary)',letterSpacing:'-0.5px'}}>
-                    {visite.length}
-                  </div>
-                </div>
-              </div>
+          ) : (() => {
+            // ── Calcoli statistiche ──
+            const visitePagate = visite.filter(v => {
+              const p = v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0);
+              return p > 0;
+            });
+            const totale = visite.reduce((sum,v) => {
+              return sum + (v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0));
+            }, 0);
+            const mediaSpesa = visitePagate.length > 0 ? totale / visitePagate.length : 0;
 
-              {/* Lista visite */}
-              {visite.map((v,i) => {
-                const coloreStato = {confermato:'#2563eb','in attesa':'#d97706',completato:'#059669',cancellato:'#dc2626'}[v.stato]||'#888';
-                const prezzo = v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0);
-                const servizi = (v.appuntamenti_servizi||[]).map(s=>s.servizi?.nome).filter(Boolean).join(', ');
-                return (
-                  <div key={v.id} style={{...glassCard,padding:'13px 15px'}}>
-                    <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
-                      {/* Data */}
-                      <div style={{flexShrink:0,textAlign:'center',minWidth:44}}>
-                        <div style={{fontSize:18,fontWeight:800,color:'var(--text-primary)',lineHeight:1}}>
-                          {new Date(v.inizio).getDate()}
+            // Frequenza media tra visite (in giorni)
+            const visiteOrdinate = [...visite].sort((a,b) => new Date(a.inizio)-new Date(b.inizio));
+            let freqMediaGiorni = null;
+            if (visiteOrdinate.length > 1) {
+              const intervalli = [];
+              for (let i=1; i<visiteOrdinate.length; i++) {
+                const diff = (new Date(visiteOrdinate[i].inizio) - new Date(visiteOrdinate[i-1].inizio)) / (1000*60*60*24);
+                intervalli.push(diff);
+              }
+              freqMediaGiorni = Math.round(intervalli.reduce((a,b)=>a+b,0) / intervalli.length);
+            }
+
+            // Prossima visita stimata
+            let prossimaStimata = null;
+            if (freqMediaGiorni && visiteOrdinate.length > 0) {
+              const ultima = new Date(visiteOrdinate[visiteOrdinate.length-1].inizio);
+              const prossima = new Date(ultima.getTime() + freqMediaGiorni * 24*60*60*1000);
+              const oggi = new Date();
+              if (prossima > oggi) {
+                const giorniMancanti = Math.round((prossima - oggi) / (1000*60*60*24));
+                prossimaStimata = { data: prossima, giorni: giorniMancanti };
+              } else {
+                prossimaStimata = { data: prossima, giorni: 0, inRitardo: true };
+              }
+            }
+
+            // Servizio più richiesto
+            const conteggioServizi = {};
+            visite.forEach(v => {
+              (v.appuntamenti_servizi||[]).forEach(s => {
+                const nome = s.servizi?.nome;
+                if (nome) conteggioServizi[nome] = (conteggioServizi[nome]||0) + 1;
+              });
+            });
+            const serviziOrdinati = Object.entries(conteggioServizi).sort((a,b)=>b[1]-a[1]);
+            const servizioTop = serviziOrdinati[0];
+
+            // Grafico spesa per mese (ultimi 6 mesi)
+            const ora = new Date();
+            const mesi = Array.from({length:6}, (_,i) => {
+              const d = new Date(ora.getFullYear(), ora.getMonth()-5+i, 1);
+              return { anno:d.getFullYear(), mese:d.getMonth(), label:d.toLocaleDateString('it-IT',{month:'short',year:'2-digit'}), totale:0 };
+            });
+            visite.forEach(v => {
+              const d = new Date(v.inizio);
+              const p = v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0);
+              const m = mesi.find(m => m.anno===d.getFullYear() && m.mese===d.getMonth());
+              if (m) m.totale += p;
+            });
+            const maxMese = Math.max(...mesi.map(m=>m.totale), 1);
+
+            return (
+              <>
+                {/* ── KPI cards ── */}
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+                  <div style={{...glassCard, padding:'14px 16px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:4}}>Totale speso</div>
+                    <div style={{fontSize:22,fontWeight:800,color:'#2563eb',letterSpacing:'-0.5px'}}>€ {totale.toFixed(2)}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>in {visite.length} visit{visite.length===1?'a':'e'}</div>
+                  </div>
+                  <div style={{...glassCard, padding:'14px 16px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:4}}>Spesa media</div>
+                    <div style={{fontSize:22,fontWeight:800,color:'#059669',letterSpacing:'-0.5px'}}>€ {mediaSpesa.toFixed(2)}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>per visita</div>
+                  </div>
+                  <div style={{...glassCard, padding:'14px 16px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:4}}>Frequenza media</div>
+                    <div style={{fontSize:22,fontWeight:800,color:'#7c3aed',letterSpacing:'-0.5px'}}>
+                      {freqMediaGiorni ? `${freqMediaGiorni}gg` : '—'}
+                    </div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>tra una visita e l'altra</div>
+                  </div>
+                  <div style={{...glassCard, padding:'14px 16px',
+                    background: prossimaStimata?.inRitardo ? 'rgba(220,38,38,0.06)' : prossimaStimata?.giorni<=7 ? 'rgba(217,119,6,0.06)' : 'var(--card-bg-sm)',
+                  }}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:4}}>Prossima stimata</div>
+                    {prossimaStimata ? (
+                      <>
+                        <div style={{fontSize:16,fontWeight:800,letterSpacing:'-0.3px',
+                          color: prossimaStimata.inRitardo ? '#dc2626' : prossimaStimata.giorni<=7 ? '#d97706' : 'var(--text-primary)'}}>
+                          {prossimaStimata.inRitardo ? 'In ritardo' : `tra ${prossimaStimata.giorni}gg`}
                         </div>
-                        <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.3px'}}>
-                          {new Date(v.inizio).toLocaleDateString('it-IT',{month:'short'})}
+                        <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                          {prossimaStimata.data.toLocaleDateString('it-IT',{day:'numeric',month:'short'})}
+                          {prossimaStimata.inRitardo && ' ⚠️'}
                         </div>
-                        <div style={{fontSize:10,color:'var(--text-muted)'}}>
-                          {new Date(v.inizio).getFullYear()}
-                        </div>
-                      </div>
-                      {/* Barra colore */}
-                      <div style={{width:3,alignSelf:'stretch',borderRadius:99,background:coloreStato,flexShrink:0}}/>
-                      {/* Info */}
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-                          <span style={{fontSize:13,fontWeight:700,color:'var(--text-primary)'}}>
-                            {new Date(v.inizio).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}
-                            {v.fine && ` — ${new Date(v.fine).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`}
-                          </span>
-                          <span style={{fontSize:10,fontWeight:700,background:coloreStato+'18',color:coloreStato,
-                            padding:'2px 7px',borderRadius:20}}>{v.stato}</span>
-                        </div>
-                        {servizi && (
-                          <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:2,
-                            whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                            ✂️ {servizi}
-                          </div>
-                        )}
-                        {v.operatori?.nome && (
-                          <div style={{fontSize:11,color:'var(--text-muted)'}}>
-                            👤 {v.operatori.nome} {v.operatori.cognome||''}
-                          </div>
-                        )}
-                        {v.note && (
-                          <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:4,
-                            background:'var(--card-bg-sm)',borderRadius:8,padding:'6px 8px',
-                            fontStyle:'italic',lineHeight:1.4}}>
-                            "{v.note}"
-                          </div>
-                        )}
-                      </div>
-                      {/* Prezzo */}
-                      {prezzo > 0 && (
-                        <div style={{flexShrink:0,fontSize:14,fontWeight:800,color:'#059669'}}>
-                          € {prezzo.toFixed(2)}
-                        </div>
-                      )}
+                      </>
+                    ) : (
+                      <div style={{fontSize:16,fontWeight:800,color:'var(--text-muted)'}}>—</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Servizio top ── */}
+                {servizioTop && (
+                  <div style={{...glassCard, padding:'13px 16px', display:'flex', alignItems:'center', gap:12}}>
+                    <div style={{fontSize:28}}>✂️</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:3}}>Servizio più richiesto</div>
+                      <div style={{fontSize:15,fontWeight:700,color:'var(--text-primary)'}}>{servizioTop[0]}</div>
+                    </div>
+                    <div style={{background:'rgba(37,99,235,0.1)',color:'#2563eb',fontWeight:800,fontSize:16,padding:'6px 14px',borderRadius:20}}>
+                      {servizioTop[1]}×
                     </div>
                   </div>
-                );
-              })}
-            </>
-          )}
+                )}
+
+                {/* ── Grafico spesa ultimi 6 mesi ── */}
+                <div style={{...glass, padding:'16px 18px'}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:14}}>📈 Spesa ultimi 6 mesi</div>
+                  <div style={{display:'flex', alignItems:'flex-end', gap:6, height:80}}>
+                    {mesi.map((m,i) => {
+                      const pct = maxMese > 0 ? (m.totale/maxMese)*100 : 0;
+                      const isCurrentMonth = m.anno===ora.getFullYear() && m.mese===ora.getMonth();
+                      return (
+                        <div key={i} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4, height:'100%', justifyContent:'flex-end'}}>
+                          <div style={{fontSize:9,fontWeight:700,color:'#2563eb',opacity:m.totale>0?1:0}}>
+                            {m.totale>0?`€${m.totale.toFixed(0)}`:''}
+                          </div>
+                          <div style={{
+                            width:'100%', borderRadius:'6px 6px 0 0',
+                            minHeight: m.totale>0 ? 4 : 2,
+                            height: `${Math.max(pct,3)}%`,
+                            background: isCurrentMonth
+                              ? 'linear-gradient(180deg,#5aabff,#2060dd)'
+                              : m.totale>0 ? 'rgba(37,99,235,0.3)' : 'rgba(37,99,235,0.1)',
+                            transition:'height 0.5s ease',
+                          }}/>
+                          <div style={{fontSize:9,color:'var(--text-muted)',fontWeight:isCurrentMonth?700:400,whiteSpace:'nowrap'}}>
+                            {m.label}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── Tutti i servizi usati ── */}
+                {serviziOrdinati.length > 1 && (
+                  <div style={{...glassCard, padding:'13px 16px'}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:10}}>Tutti i servizi</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:7}}>
+                      {serviziOrdinati.map(([nome,count]) => {
+                        const pct = (count/serviziOrdinati[0][1])*100;
+                        return (
+                          <div key={nome}>
+                            <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                              <span style={{fontSize:12,fontWeight:600,color:'var(--text-primary)'}}>{nome}</span>
+                              <span style={{fontSize:12,fontWeight:700,color:'#2563eb'}}>{count}×</span>
+                            </div>
+                            <div style={{height:4,borderRadius:99,background:'rgba(37,99,235,0.1)',overflow:'hidden'}}>
+                              <div style={{height:'100%',borderRadius:99,background:'#2563eb',width:`${pct}%`,transition:'width 0.5s ease'}}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Lista visite ── */}
+                <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',letterSpacing:'0.5px',textTransform:'uppercase',marginTop:4}}>
+                  Storico visite
+                </div>
+                {visite.map((v,i) => {
+                  const coloreStato = {confermato:'#2563eb','in attesa':'#d97706',completato:'#059669',cancellato:'#dc2626'}[v.stato]||'#888';
+                  const prezzo = v.prezzo_confermato_flag ? Number(v.prezzo_confermato||0) : Number(v.prezzo_proposto||0);
+                  const servizi = (v.appuntamenti_servizi||[]).map(s=>s.servizi?.nome).filter(Boolean).join(', ');
+                  return (
+                    <div key={v.id} style={{...glassCard,padding:'13px 15px'}}>
+                      <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
+                        <div style={{flexShrink:0,textAlign:'center',minWidth:44}}>
+                          <div style={{fontSize:18,fontWeight:800,color:'var(--text-primary)',lineHeight:1}}>{new Date(v.inizio).getDate()}</div>
+                          <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.3px'}}>{new Date(v.inizio).toLocaleDateString('it-IT',{month:'short'})}</div>
+                          <div style={{fontSize:10,color:'var(--text-muted)'}}>{new Date(v.inizio).getFullYear()}</div>
+                        </div>
+                        <div style={{width:3,alignSelf:'stretch',borderRadius:99,background:coloreStato,flexShrink:0}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                            <span style={{fontSize:13,fontWeight:700,color:'var(--text-primary)'}}>
+                              {new Date(v.inizio).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}
+                              {v.fine && ` — ${new Date(v.fine).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`}
+                            </span>
+                            <span style={{fontSize:10,fontWeight:700,background:coloreStato+'18',color:coloreStato,padding:'2px 7px',borderRadius:20}}>{v.stato}</span>
+                          </div>
+                          {servizi && <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>✂️ {servizi}</div>}
+                          {v.operatori?.nome && <div style={{fontSize:11,color:'var(--text-muted)'}}>👤 {v.operatori.nome} {v.operatori.cognome||''}</div>}
+                          {v.note && <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:4,background:'var(--card-bg-sm)',borderRadius:8,padding:'6px 8px',fontStyle:'italic',lineHeight:1.4}}>"{v.note}"</div>}
+                        </div>
+                        {prezzo > 0 && <div style={{flexShrink:0,fontSize:14,fontWeight:800,color:'#059669'}}>€ {prezzo.toFixed(2)}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
         </div>
       )}
     </motion.div>

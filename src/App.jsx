@@ -433,6 +433,7 @@ function PlaceholderView({ title, description }) {
 export default function App() {
   const [active, setActive] = useState("home");
   const [navHidden, setNavHidden] = useState(false);
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showRicerca,    setShowRicerca]    = useState(false);
   const [pendingPetId,   setPendingPetId]   = useState(null);
@@ -740,21 +741,30 @@ export default function App() {
           left: 50%;
           transform: translateX(-50%);
           display: flex;
-          gap: 2px;
-          padding: 8px 10px;
+          flex-direction: column;
+          gap: 0;
           border-radius: 26px;
           z-index: 100;
           width: calc(100% - 32px);
-          max-width: 440px;
+          max-width: 420px;
           backdrop-filter: blur(40px) saturate(2);
           -webkit-backdrop-filter: blur(40px) saturate(2);
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
+          overflow: hidden;
         }
-        .bottom-nav::-webkit-scrollbar { display: none; }
+        .bottom-nav-row {
+          display: flex;
+          gap: 2px;
+          padding: 8px 10px;
+        }
+        .bottom-nav-drawer {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 2px;
+          padding: 4px 10px 10px;
+          border-top: 1px solid rgba(255,255,255,0.15);
+        }
         .nav-item {
-          flex: 0 0 auto;
+          flex: 1;
           min-width: 52px;
           display: flex;
           flex-direction: column;
@@ -947,46 +957,92 @@ export default function App() {
 
         {/* Bottom nav */}
         <AnimatePresence>
-          {!navHidden && (
-            <motion.nav
-              className="bottom-nav"
-              initial={{ y: 80, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 80, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            >
-              {NAV_ITEMS.map((item) => (
-                <motion.button
-                  key={item.id}
-                  className={"nav-item" + (active === item.id ? " active" : "")}
-                  onClick={() => handleNav(item.id)}
-                  whileTap={{ scale: 0.9 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <motion.span
-                    animate={active === item.id ? { scale: [1, 1.2, 1] } : { scale: 1 }}
-                    transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                    style={{ display: "flex" }}
-                  >
-                    {item.icon}
-                  </motion.span>
-                  <span>{item.label}</span>
-                </motion.button>
-              ))}
-              {/* Tasto nascondi */}
-              <motion.button
-                className="nav-item"
-                onClick={() => setNavHidden(true)}
-                whileTap={{ scale: 0.9 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                style={{ maxWidth: 36 }}
+          {!navHidden && (() => {
+            const NAV_MAIN  = NAV_ITEMS.filter(i => ['home','calendario','clienti','pet'].includes(i.id));
+            const NAV_EXTRA = NAV_ITEMS.filter(i => !['home','calendario','clienti','pet'].includes(i.id));
+            return (
+              <motion.nav
+                className="bottom-nav"
+                initial={{ y: 80, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 80, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                  <path d="M19 9l-7 7-7-7"/>
-                </svg>
-              </motion.button>
-            </motion.nav>
-          )}
+                {/* Riga principale — 4 voci + tasto cassetto */}
+                <div className="bottom-nav-row">
+                  {NAV_MAIN.map((item) => (
+                    <motion.button
+                      key={item.id}
+                      className={"nav-item" + (active === item.id ? " active" : "")}
+                      onClick={() => { handleNav(item.id); setNavDrawerOpen(false); }}
+                      whileTap={{ scale: 0.9 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    >
+                      <motion.span
+                        animate={active === item.id ? { scale: [1, 1.2, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                        style={{ display: "flex" }}
+                      >
+                        {item.icon}
+                      </motion.span>
+                      <span>{item.label}</span>
+                    </motion.button>
+                  ))}
+
+                  {/* Tasto apri cassetto */}
+                  <motion.button
+                    className={"nav-item" + (navDrawerOpen || NAV_EXTRA.some(i => i.id === active) ? " active" : "")}
+                    onClick={() => setNavDrawerOpen(v => !v)}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  >
+                    <motion.svg
+                      width="22" height="22" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                      animate={{ rotate: navDrawerOpen ? 90 : 0 }}
+                      transition={{ duration: 0.22 }}
+                    >
+                      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+                    </motion.svg>
+                    <span>Altro</span>
+                  </motion.button>
+                </div>
+
+                {/* Cassetto — voci extra */}
+                <AnimatePresence>
+                  {navDrawerOpen && (
+                    <motion.div
+                      className="bottom-nav-drawer"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ overflow: "hidden" }}
+                    >
+                      {NAV_EXTRA.map((item) => (
+                        <motion.button
+                          key={item.id}
+                          className={"nav-item" + (active === item.id ? " active" : "")}
+                          onClick={() => { handleNav(item.id); setNavDrawerOpen(false); }}
+                          whileTap={{ scale: 0.9 }}
+                          style={{ flex: "0 0 calc(25% - 2px)" }}
+                        >
+                          <motion.span
+                            animate={active === item.id ? { scale: [1, 1.2, 1] } : { scale: 1 }}
+                            transition={{ duration: 0.3 }}
+                            style={{ display: "flex" }}
+                          >
+                            {item.icon}
+                          </motion.span>
+                          <span>{item.label}</span>
+                        </motion.button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.nav>
+            );
+          })()}
         </AnimatePresence>
       </div>
       {/* Toast notifica WhatsApp in tempo reale */}

@@ -300,7 +300,7 @@ export default function RicercaGlobale({ onClose, onNavigate }) {
       // Animali: cerca su nome + unisci con cliente
       supabase
         .from('animali')
-        .select('id, nome, specie, colore, problemi_carattere, razze(nome), clienti(id, nome, cognome)')
+        .select('id, nome, specie, colore, problemi_carattere, razze(nome), clienti!left(id, nome, cognome)')
         .ilike('nome', like)
         .limit(6),
 
