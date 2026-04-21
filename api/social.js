@@ -1,9 +1,9 @@
 /**
  * api/social.js — Vercel Serverless Function
- * Proxy per Google Gemini 2.0 Flash
+ * Proxy per Groq (LLaMA 3.3 70B) — completamente gratuito
  *
  * Setup variabile d'ambiente su Vercel:
- *   GEMINI_API_KEY = AIza...
+ *   GROQ_API_KEY = gsk_...
  */
 
 export const config = { runtime: 'nodejs' };
@@ -13,20 +13,13 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GROQ_API_KEY non configurata su Vercel' });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY non configurata su Vercel' });
-  }
-
-  let body = '';
+  let body;
   try {
     body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   } catch {
@@ -34,34 +27,30 @@ export default async function handler(req, res) {
   }
 
   const prompt = body?.prompt;
-  if (!prompt) {
-    return res.status(400).json({ error: 'Prompt mancante' });
-  }
+  if (!prompt) return res.status(400).json({ error: 'Prompt mancante' });
 
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature:     0.85,
-            maxOutputTokens: 1200,
-          },
-        }),
-      }
-    );
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.85,
+        max_tokens: 1200,
+      }),
+    });
 
-    const data = await geminiRes.json();
+    const data = await groqRes.json();
 
-    if (!geminiRes.ok) {
-      const msg = data?.error?.message || 'Errore Gemini';
-      return res.status(geminiRes.status).json({ error: msg });
+    if (!groqRes.ok) {
+      return res.status(groqRes.status).json({ error: data?.error?.message || 'Errore Groq' });
     }
 
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const text = data.choices?.[0]?.message?.content ?? '';
     return res.status(200).json({ text });
 
   } catch (err) {
