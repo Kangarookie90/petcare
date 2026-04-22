@@ -810,12 +810,12 @@ export default function App() {
         .nav-item svg { width: 22px; height: 22px; }
         .nav-item span { font-size: 10px; font-weight: 600; letter-spacing: 0.1px; }
         @media (min-width: 640px) {
-          .sidebar { display: flex; }
+          .sidebar { display: flex; padding-top: max(28px, calc(20px + env(safe-area-inset-top))); }
           .bottom-nav { display: none; }
           .nav-toggle { display: none !important; }
-          .main { margin-left: 240px; padding: 32px 36px 36px; transition: margin-left 0.3s cubic-bezier(0.4,0,0.2,1); }
+          .main { margin-left: 240px; padding: max(32px, calc(20px + env(safe-area-inset-top))) 36px 36px; transition: margin-left 0.3s cubic-bezier(0.4,0,0.2,1); }
           .main.sidebar-collapsed { margin-left: 68px; }
-          .main.nav-hidden { padding: 32px 36px 36px; }
+          .main.nav-hidden { padding: max(32px, calc(20px + env(safe-area-inset-top))) 36px 36px; }
         }
 
         /* ── View Transitions — definiti in index.css ── */
