@@ -14,6 +14,8 @@ import ProssimiView from './ProssimiView';
 import RicercaGlobale from './RicercaGlobale';
 import ProfiloView from './ProfiloView';
 import SocialView from './SocialView';
+import DashboardOperatoreView from './DashboardOperatoreView';
+import ListaAttesaView from './ListaAttesaView';
 import {
   useNotifiche,
   NotificaToast,
@@ -150,6 +152,31 @@ const NAV_ITEMS = [
         <circle cx="6" cy="12" r="3"/>
         <circle cx="18" cy="19" r="3"/>
         <path d="M8.7 10.7l6.6-3.4M8.7 13.3l6.6 3.4"/>
+      </svg>
+    ),
+  },
+  {
+    id: "dashboard_op",
+    label: "Dashboard Op.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="9" rx="2"/>
+        <rect x="14" y="3" width="7" height="5" rx="2"/>
+        <rect x="14" y="12" width="7" height="9" rx="2"/>
+        <rect x="3" y="16" width="7" height="5" rx="2"/>
+      </svg>
+    ),
+  },
+  {
+    id: "lista_attesa",
+    label: "Lista Attesa",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+        <path d="M16 3.13a4 4 0 010 7.75"/>
+        <path d="M20 8h2M21 7v2"/>
       </svg>
     ),
   },
@@ -522,6 +549,8 @@ export default function App() {
       case "primanota":    return <PrimanotaView key="primanota" />;
       case "profilo":      return <ProfiloView key="profilo" />;
       case "social":       return <SocialView key="social" />;
+      case "dashboard_op": return <DashboardOperatoreView key="dashboard_op" />;
+      case "lista_attesa": return <ListaAttesaView key="lista_attesa" onNavigateToCalendario={() => setActive('calendario')} />;
       default:           return null;
     }
   };

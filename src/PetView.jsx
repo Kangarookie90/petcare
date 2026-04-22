@@ -566,6 +566,118 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const [visite,        setVisite]        = useState([]);
   const [visiteLoding,  setVisiteLoading] = useState(false);
 
+  // ── Comportamento ──
+  const COMP_VOCI = [
+    { id: 'reattivita_cani',     label: 'Reattività con altri cani',   icon: '🐕' },
+    { id: 'reattivita_estranei', label: 'Reattività con estranei',     icon: '👤' },
+    { id: 'stress_bagno',        label: 'Stress durante il bagno',     icon: '🚿' },
+    { id: 'stress_asciugatura',  label: 'Stress durante l\'asciugatura',icon: '💨' },
+    { id: 'rischio_morso',       label: 'Rischio morso',               icon: '⚠️' },
+    { id: 'collaborazione',      label: 'Collaborazione generale',     icon: '🤝' },
+  ];
+  const SEMAFORO = [
+    { val: 'verde',   label: 'OK',      color: '#059669', bg: 'rgba(5,150,105,0.12)',  border: 'rgba(5,150,105,0.3)'  },
+    { val: 'giallo',  label: 'Attenzione', color: '#d97706', bg: 'rgba(217,119,6,0.12)',  border: 'rgba(217,119,6,0.3)'  },
+    { val: 'rosso',   label: 'Critico', color: '#dc2626', bg: 'rgba(220,38,38,0.12)',  border: 'rgba(220,38,38,0.3)'  },
+  ];
+  const [comportamento,     setComportamento]     = useState(animale.comportamento || {});
+  const [compNote,          setCompNote]          = useState(animale.comportamento_note || '');
+  const [savingComp,        setSavingComp]        = useState(false);
+  const [compEditMode,      setCompEditMode]      = useState(false);
+
+  const saveComportamento = async (nuovoComp, nuoveNote) => {
+    setSavingComp(true);
+    await supabase.from('animali').update({
+      comportamento: nuovoComp,
+      comportamento_note: nuoveNote,
+    }).eq('id', animale.id);
+    onUpdate({ ...animale, comportamento: nuovoComp, comportamento_note: nuoveNote });
+    setSavingComp(false);
+    setCompEditMode(false);
+  };
+
+  // ── Nota vocale ──
+  const [recState,      setRecState]      = useState('idle'); // idle | recording | done
+  const [audioUrl,      setAudioUrl]      = useState(null);
+  const [audioBlob,     setAudioBlob]     = useState(null);
+  const [savingAudio,   setSavingAudio]   = useState(false);
+  const [audioError,    setAudioError]    = useState('');
+  const [memoVocali,    setMemoVocali]    = useState([]);
+  const [loadingMemo,   setLoadingMemo]   = useState(false);
+  const mediaRecRef  = useRef(null);
+  const chunksRef    = useRef([]);
+
+  useEffect(() => {
+    if (tab !== 'note_vocali') return;
+    setLoadingMemo(true);
+    supabase.storage.from('animali-memo').list(`${animale.id}/`)
+      .then(async ({ data }) => {
+        if (!data) { setMemoVocali([]); setLoadingMemo(false); return; }
+        const urls = await Promise.all(
+          data.filter(f => f.name !== '.emptyFolderPlaceholder').map(async f => {
+            const path = `${animale.id}/${f.name}`;
+            const { data: su } = await supabase.storage.from('animali-memo').createSignedUrl(path, 3600);
+            return { name: f.name, url: su?.signedUrl, created_at: f.created_at, path };
+          })
+        );
+        setMemoVocali(urls.filter(u => u.url).sort((a,b) => b.name.localeCompare(a.name)));
+        setLoadingMemo(false);
+      });
+  }, [tab, animale.id]);
+
+  const startRecording = async () => {
+    setAudioError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunksRef.current = [];
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+        setRecState('done');
+      };
+      mediaRecRef.current = mr;
+      mr.start();
+      setRecState('recording');
+      setTimeout(() => { if (mediaRecRef.current?.state === 'recording') mediaRecRef.current.stop(); }, 60000);
+    } catch(e) {
+      setAudioError('Microfono non disponibile: ' + e.message);
+    }
+  };
+
+  const stopRecording = () => { mediaRecRef.current?.stop(); };
+
+  const saveAudio = async () => {
+    if (!audioBlob) return;
+    setSavingAudio(true);
+    const fname = `${Date.now()}.webm`;
+    const path  = `${animale.id}/${fname}`;
+    await supabase.storage.from('animali-memo').upload(path, audioBlob, { contentType: 'audio/webm' });
+    setAudioBlob(null); setAudioUrl(null); setRecState('idle');
+    // Ricarica lista
+    const { data } = await supabase.storage.from('animali-memo').list(`${animale.id}/`);
+    if (data) {
+      const urls = await Promise.all(
+        data.filter(f => f.name !== '.emptyFolderPlaceholder').map(async f => {
+          const p = `${animale.id}/${f.name}`;
+          const { data: su } = await supabase.storage.from('animali-memo').createSignedUrl(p, 3600);
+          return { name: f.name, url: su?.signedUrl, created_at: f.created_at, path: p };
+        })
+      );
+      setMemoVocali(urls.filter(u => u.url).sort((a,b) => b.name.localeCompare(a.name)));
+    }
+    setSavingAudio(false);
+  };
+
+  const deleteMemo = async (memo) => {
+    if (!window.confirm('Eliminare questo memo vocale?')) return;
+    await supabase.storage.from('animali-memo').remove([memo.path]);
+    setMemoVocali(prev => prev.filter(m => m.path !== memo.path));
+  };
+
   // ── Scheda sanitaria (editabile) ──
   const [sanEdit,  setSanEdit]  = useState(false);
   const [sanForm,  setSanForm]  = useState({
@@ -801,11 +913,11 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
       </div>
 
       {/* Tab */}
-      <div style={{...glass,padding:'6px',marginBottom:14,display:'flex',gap:4}}>
-        {[{id:'scheda',label:'📋 Scheda'},{id:'mappa',label:'🗺️ Mappa'},{id:'salute',label:'🏥 Salute'},{id:'storico',label:'📌 Note'},{id:'visite',label:'📅 Visite'}].map(t=>(
+      <div style={{...glass,padding:'6px',marginBottom:14,display:'flex',gap:4,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+        {[{id:'scheda',label:'📋 Scheda'},{id:'comportamento',label:'🧠 Carattere'},{id:'mappa',label:'🗺️ Mappa'},{id:'salute',label:'🏥 Salute'},{id:'storico',label:'📌 Note'},{id:'visite',label:'📅 Visite'},{id:'note_vocali',label:'🎙️ Memo'}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            flex:1,padding:'9px 8px',borderRadius:14,border:'none',cursor:'pointer',
-            fontFamily:'inherit',fontSize:13,transition:'all 0.2s',
+            flexShrink:0,padding:'9px 10px',borderRadius:14,border:'none',cursor:'pointer',
+            fontFamily:'inherit',fontSize:12,transition:'all 0.2s',
             background:tab===t.id?'var(--card-border)':'transparent',
             color:tab===t.id?'var(--text-primary)':'var(--text-secondary)',
             fontWeight:tab===t.id?600:500,
@@ -971,6 +1083,171 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
           pet={{specie:animale.specie, annotazioni:animale.annotazioni||[]}}
           onZoneSaved={handleZoneSaved}
         />
+      )}
+
+      {/* ── COMPORTAMENTO ───────────────────────────────────── */}
+      {tab==='comportamento' && (
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+          {/* Warning banner se ci sono voci rosse */}
+          {Object.values(comportamento).some(v=>v==='rosso') && (
+            <div style={{background:'rgba(220,38,38,0.1)',border:'1px solid rgba(220,38,38,0.3)',borderRadius:14,padding:'12px 16px',display:'flex',gap:10,alignItems:'center'}}>
+              <span style={{fontSize:20}}>⚠️</span>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:'#dc2626'}}>Attenzione — voci critiche presenti</div>
+                <div style={{fontSize:12,color:'rgba(220,38,38,0.8)',marginTop:2}}>
+                  {COMP_VOCI.filter(v=>comportamento[v.id]==='rosso').map(v=>v.label).join(' · ')}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{...glass,padding:'16px 18px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+              <div style={secLabel}>Profilo comportamentale</div>
+              {!compEditMode ? (
+                <button onClick={()=>setCompEditMode(true)} style={{...btnSecondary,padding:'7px 13px',fontSize:12}}>✏️ Modifica</button>
+              ) : (
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>setCompEditMode(false)} style={{...btnSecondary,padding:'7px 13px',fontSize:12}}>Annulla</button>
+                  <button onClick={()=>saveComportamento(comportamento,compNote)} disabled={savingComp}
+                    style={{...btnPrimary,padding:'7px 14px',fontSize:12,opacity:savingComp?0.7:1}}>
+                    {savingComp?'...':'Salva'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {COMP_VOCI.map(voce => {
+              const val = comportamento[voce.id] || null;
+              return (
+                <div key={voce.id} style={{marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:600,color:'var(--text-secondary)',marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
+                    <span>{voce.icon}</span> {voce.label}
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    {SEMAFORO.map(s => {
+                      const sel = val === s.val;
+                      return (
+                        <button key={s.val}
+                          disabled={!compEditMode}
+                          onClick={()=>{
+                            const nuovoComp = {...comportamento,[voce.id]:sel?null:s.val};
+                            setComportamento(nuovoComp);
+                          }}
+                          style={{
+                            flex:1,padding:'8px 4px',borderRadius:10,cursor:compEditMode?'pointer':'default',
+                            fontFamily:'inherit',fontSize:11,fontWeight:700,transition:'all 0.15s',
+                            background: sel ? s.bg : 'var(--card-bg-sm)',
+                            border: `1px solid ${sel ? s.border : 'var(--card-border-sm)'}`,
+                            color: sel ? s.color : 'var(--text-muted)',
+                            display:'flex',alignItems:'center',justifyContent:'center',gap:4,
+                          }}>
+                          <span style={{width:8,height:8,borderRadius:'50%',background:sel?s.color:'var(--card-border)',display:'inline-block',flexShrink:0}}/>
+                          {s.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Note comportamentali */}
+            <div style={{marginTop:8}}>
+              <div style={{fontSize:12,fontWeight:600,color:'var(--text-muted)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.4px'}}>📝 Note aggiuntive</div>
+              {compEditMode ? (
+                <textarea rows={3} placeholder="Es. abbaia agli sconosciuti ma si calma dopo pochi minuti..."
+                  value={compNote} onChange={e=>setCompNote(e.target.value)}
+                  style={{...inputStyle,resize:'vertical',fontSize:13}}/>
+              ) : (
+                <div style={{fontSize:13,color:compNote?'var(--text-primary)':'var(--text-muted)',lineHeight:1.6,fontStyle:compNote?'normal':'italic'}}>
+                  {compNote || 'Nessuna nota comportamentale'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MEMO VOCALI ─────────────────────────────────────── */}
+      {tab==='note_vocali' && (
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{...glass,padding:'18px 20px'}}>
+            <div style={{...secLabel,marginBottom:14}}>🎙️ Registra memo vocale</div>
+
+            {audioError && (
+              <div style={{background:'rgba(220,38,38,0.1)',border:'1px solid rgba(220,38,38,0.25)',borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:12}}>
+                {audioError}
+              </div>
+            )}
+
+            {recState === 'idle' && (
+              <button onClick={startRecording}
+                style={{width:'100%',padding:'14px',borderRadius:14,cursor:'pointer',fontFamily:'inherit',
+                  border:'none',background:'linear-gradient(145deg,#f97316,#dc2626)',
+                  color:'#fff',fontWeight:700,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+                  boxShadow:'0 4px 16px rgba(220,60,40,0.3)'}}>
+                <span style={{fontSize:20}}>🎙️</span> Avvia registrazione
+              </button>
+            )}
+
+            {recState === 'recording' && (
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:13,color:'#dc2626',fontWeight:600,marginBottom:10,animation:'pulse 1.2s infinite'}}>
+                  ● REC in corso...
+                </div>
+                <button onClick={stopRecording}
+                  style={{width:'100%',padding:'14px',borderRadius:14,cursor:'pointer',fontFamily:'inherit',
+                    border:'1px solid rgba(220,38,38,0.3)',background:'rgba(220,38,38,0.08)',
+                    color:'#dc2626',fontWeight:700,fontSize:14}}>
+                  ■ Stop
+                </button>
+              </div>
+            )}
+
+            {recState === 'done' && audioUrl && (
+              <div>
+                <audio controls src={audioUrl} style={{width:'100%',marginBottom:12,borderRadius:8}}/>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>{setRecState('idle');setAudioUrl(null);setAudioBlob(null);}}
+                    style={{...btnSecondary,flex:1,padding:'11px',fontSize:13}}>
+                    🗑️ Scarta
+                  </button>
+                  <button onClick={saveAudio} disabled={savingAudio}
+                    style={{...btnPrimary,flex:2,padding:'11px',fontSize:13,opacity:savingAudio?0.7:1}}>
+                    {savingAudio?'Salvataggio...':'💾 Salva memo'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Lista memo salvati */}
+          <div style={{...glass,padding:'16px 18px'}}>
+            <div style={{...secLabel,marginBottom:12}}>Memo salvati</div>
+            {loadingMemo ? (
+              <div style={{fontSize:13,color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>Caricamento...</div>
+            ) : memoVocali.length === 0 ? (
+              <div style={{fontSize:13,color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>Nessun memo registrato</div>
+            ) : memoVocali.map((memo,i) => {
+              const data = new Date(parseInt(memo.name)).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+              return (
+                <div key={i} style={{...glassCard,padding:'12px 14px',marginBottom:8}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <div style={{fontSize:12,fontWeight:600,color:'var(--text-secondary)'}}>🎙️ {data}</div>
+                    <button onClick={()=>deleteMemo(memo)}
+                      style={{background:'rgba(220,38,38,0.08)',border:'1px solid rgba(220,38,38,0.2)',
+                        borderRadius:8,padding:'4px 8px',cursor:'pointer',color:'#dc2626',fontSize:11}}>
+                      ✕
+                    </button>
+                  </div>
+                  <audio controls src={memo.url} style={{width:'100%',borderRadius:6}}/>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Storico note */}

@@ -287,7 +287,61 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   const [loading, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // ── Suggerimento prossimo appuntamento ──
+  const [showSuggerimento, setShowSuggerimento] = useState(false);
+  const [suggerimentoData, setSuggerimentoData] = useState(null);
+  const [creandoProssimo,  setCreandoProssimo]  = useState(false);
+
+  // ── Check-in fotografico ──
+  const [showFotoCheckin,  setShowFotoCheckin]  = useState(false);
+  const [fotoCheckinUrls,  setFotoCheckinUrls]  = useState({ prima: null, dopo: null });
+  const [fotoCheckinBlobs, setFotoCheckinBlobs] = useState({ prima: null, dopo: null });
+  const [savingFoto,       setSavingFoto]       = useState(false);
+  const fotoInputPrimaRef = useRef(null);
+  const fotoInputDopoRef  = useRef(null);
+
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  // ── Calcola frequenza media e suggerisce prossimo appuntamento ──
+  const calcolaSuggerimento = async (animaleId, dataCompletata) => {
+    const { data: storico } = await supabase
+      .from('appuntamenti')
+      .select('inizio')
+      .eq('animale_id', animaleId)
+      .eq('stato', 'completato')
+      .order('inizio', { ascending: false })
+      .limit(10);
+    if (!storico || storico.length < 2) return null;
+    const intervalli = [];
+    for (let i = 0; i < storico.length - 1; i++) {
+      const diff = (new Date(storico[i].inizio) - new Date(storico[i+1].inizio)) / (1000*60*60*24);
+      intervalli.push(Math.abs(diff));
+    }
+    const freqGiorni = Math.round(intervalli.reduce((a,b)=>a+b,0) / intervalli.length);
+    const prossima   = new Date(new Date(dataCompletata).getTime() + freqGiorni * 24*60*60*1000);
+    return { freqGiorni, prossima };
+  };
+
+  // ── Gestione foto check-in ──
+  const handleFotoSelect = (tipo, file) => {
+    if (!file) return;
+    setFotoCheckinUrls(p => ({ ...p, [tipo]: URL.createObjectURL(file) }));
+    setFotoCheckinBlobs(p => ({ ...p, [tipo]: file }));
+  };
+
+  const salvaFotoCheckin = async (apId) => {
+    setSavingFoto(true);
+    for (const tipo of ['prima','dopo']) {
+      const blob = fotoCheckinBlobs[tipo];
+      if (!blob) continue;
+      const path = `checkin/${apId}/${tipo}_${Date.now()}.jpg`;
+      await supabase.storage.from('appuntamenti-foto').upload(path, blob, { contentType: blob.type });
+    }
+    setSavingFoto(false);
+    setShowFotoCheckin(false);
+    setFotoCheckinUrls({ prima: null, dopo: null });
+    setFotoCheckinBlobs({ prima: null, dopo: null });
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -410,6 +464,16 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
       const serviziAssociati = f.servizi_ids.map(sid => servizi.find(x => x.id === sid)).filter(Boolean);
       onSaved({ ...result.data, _serviziMultipli: serviziAssociati });
+
+      // Se lo stato diventa "completato" → mostra check-in foto + suggerimento
+      if (f.stato === 'completato' && f.animale_id) {
+        setShowFotoCheckin(true);
+        // Calcola suggerimento in background
+        calcolaSuggerimento(f.animale_id, result.data.inizio).then(sug => {
+          if (sug) setSuggerimentoData({ ...sug, apData: result.data });
+        });
+        return; // non chiude il modal — lo chiude l'utente dopo foto/suggerimento
+      }
       onClose();
     } catch (err) {
       setError('Errore durante il salvataggio: ' + (err.message || 'riprova'));
@@ -875,6 +939,99 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
             {loading ? 'Salvataggio...' : isEdit ? 'Salva modifiche' : 'Crea appuntamento'}
           </button>
         </div>
+
+        {/* ── CHECK-IN FOTOGRAFICO ── */}
+        {showFotoCheckin && (
+          <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}
+            style={{marginTop:20,padding:'18px',borderRadius:16,
+              background:'rgba(5,150,105,0.08)',border:'1px solid rgba(5,150,105,0.25)'}}>
+            <div style={{fontSize:14,fontWeight:700,color:'#059669',marginBottom:4}}>
+              📸 Check-in fotografico
+            </div>
+            <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>
+              Aggiungi foto prima e dopo la toelettatura (opzionale)
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+              {['prima','dopo'].map(tipo => (
+                <div key={tipo}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',
+                    letterSpacing:'0.4px',marginBottom:6}}>{tipo === 'prima' ? '📷 Prima' : '✨ Dopo'}</div>
+                  <div
+                    onClick={() => tipo==='prima' ? fotoInputPrimaRef.current?.click() : fotoInputDopoRef.current?.click()}
+                    style={{height:90,borderRadius:12,cursor:'pointer',overflow:'hidden',
+                      border:`2px dashed ${fotoCheckinUrls[tipo] ? 'rgba(5,150,105,0.5)' : 'rgba(255,255,255,0.3)'}`,
+                      background: fotoCheckinUrls[tipo] ? 'transparent' : 'rgba(255,255,255,0.05)',
+                      display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    {fotoCheckinUrls[tipo]
+                      ? <img src={fotoCheckinUrls[tipo]} alt={tipo} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                      : <span style={{fontSize:24}}>+</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <input ref={fotoInputPrimaRef} type="file" accept="image/*" capture="environment" style={{display:'none'}}
+              onChange={e => handleFotoSelect('prima', e.target.files[0])} />
+            <input ref={fotoInputDopoRef}  type="file" accept="image/*" capture="environment" style={{display:'none'}}
+              onChange={e => handleFotoSelect('dopo',  e.target.files[0])} />
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={() => { setShowFotoCheckin(false); if (!suggerimentoData) onClose(); }}
+                style={{...btnSecondary,flex:1,padding:'9px',fontSize:13}}>Salta</button>
+              <button onClick={() => salvaFotoCheckin(appuntamento?.id || suggerimentoData?.apData?.id).then(()=>{ if(!suggerimentoData) onClose(); })}
+                disabled={savingFoto || (!fotoCheckinBlobs.prima && !fotoCheckinBlobs.dopo)}
+                style={{...btnPrimary,flex:2,padding:'9px',fontSize:13,
+                  opacity:(savingFoto||(!fotoCheckinBlobs.prima&&!fotoCheckinBlobs.dopo))?0.5:1}}>
+                {savingFoto ? 'Salvataggio...' : '💾 Salva foto'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── SUGGERIMENTO PROSSIMO APPUNTAMENTO ── */}
+        {suggerimentoData && !showFotoCheckin && (
+          <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}}
+            style={{marginTop:20,padding:'18px',borderRadius:16,
+              background:'rgba(37,99,235,0.08)',border:'1px solid rgba(37,99,235,0.25)'}}>
+            <div style={{fontSize:14,fontWeight:700,color:'#2563eb',marginBottom:4}}>
+              📅 Vuoi fissare il prossimo appuntamento?
+            </div>
+            <div style={{fontSize:13,color:'var(--text-secondary)',marginBottom:12,lineHeight:1.5}}>
+              In base alla frequenza storica ({suggerimentoData.freqGiorni} giorni in media),
+              il prossimo appuntamento sarebbe verso il{' '}
+              <strong style={{color:'var(--text-primary)'}}>
+                {suggerimentoData.prossima.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})}
+              </strong>.
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={onClose}
+                style={{...btnSecondary,flex:1,padding:'9px',fontSize:13}}>Non ora</button>
+              <button
+                disabled={creandoProssimo}
+                onClick={async () => {
+                  setCreandoProssimo(true);
+                  const ap = suggerimentoData.apData;
+                  const dataStr = suggerimentoData.prossima.toISOString().split('T')[0];
+                  const oraStr  = new Date(ap.inizio).toTimeString().slice(0,5);
+                  const inizio  = new Date(`${dataStr}T${oraStr}`);
+                  const fine    = new Date(inizio.getTime() + 60*60000);
+                  const { data: nuovoAp } = await supabase.from('appuntamenti').insert([{
+                    cliente_id:   ap.clienti?.id  || ap.cliente_id,
+                    animale_id:   ap.animali?.id  || ap.animale_id,
+                    operatore_id: ap.operatori?.id || ap.operatore_id,
+                    inizio: inizio.toISOString(),
+                    fine:   fine.toISOString(),
+                    stato: 'in attesa',
+                  }]).select('id,inizio,fine,stato,clienti(id,nome,cognome),animali(id,nome,specie),operatori(id,nome,colore)').single();
+                  if (nuovoAp) onSaved(nuovoAp);
+                  setCreandoProssimo(false);
+                  setSuggerimentoData(null);
+                  onClose();
+                }}
+                style={{...btnPrimary,flex:2,padding:'9px',fontSize:13,opacity:creandoProssimo?0.7:1}}>
+                {creandoProssimo ? 'Creazione...' : `✓ Prenota per il ${suggerimentoData.prossima.toLocaleDateString('it-IT',{day:'numeric',month:'short'})}`}
+              </button>
+            </div>
+          </motion.div>
+        )}
       </motion.div>
     </motion.div>
   );

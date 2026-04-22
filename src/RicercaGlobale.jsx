@@ -287,7 +287,8 @@ export default function RicercaGlobale({ onClose, onNavigate }) {
     if (q.length < MIN_CHARS) { setRisultati(null); setLoading(false); return; }
 
     setLoading(true);
-    const like = `%${q}%`;
+    const likeEscaped = q.replace(/[%_\\]/g, '\\$&');
+    const like = `%${likeEscaped}%`;
 
     const [clientiRes, animaliRes, appRes] = await Promise.all([
       // Clienti: cerca su nome, cognome, telefono, email

@@ -532,6 +532,7 @@ export default function StatisticheView() {
   const [servizi,      setServizi]      = useState([]);
   const [primanota,    setPrimanota]    = useState([]);
   const [apConf,       setApConf]       = useState([]);
+  const [opSelezionato, setOpSelezionato] = useState(null); // drill-down operatore
 
   // ── Backup / Ripristino ──────────────────────────────────────
   const [backupLoading,  setBackupLoading]  = useState(false);
@@ -1239,19 +1240,21 @@ export default function StatisticheView() {
         >
           <div style={secLabel}>Carico per operatore — {meseLabel}</div>
           <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Rings operatori */}
+            {/* Rings operatori — cliccabili */}
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {perOperatore.map(op => (
-                <DonutRing
-                  key={op.nome}
-                  value={op.totale}
-                  max={maxOpTotale}
-                  color={op.colore}
-                  size={100}
-                  strokeWidth={11}
-                  label={op.nome}
-                  sublabel={`${op.completati} ok`}
-                />
+                <div key={op.nome} onClick={() => setOpSelezionato(opSelezionato?.nome === op.nome ? null : op)}
+                  style={{ cursor: 'pointer', opacity: opSelezionato && opSelezionato.nome !== op.nome ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+                  <DonutRing
+                    value={op.totale}
+                    max={maxOpTotale}
+                    color={op.colore}
+                    size={100}
+                    strokeWidth={11}
+                    label={op.nome}
+                    sublabel={`${op.completati} ok`}
+                  />
+                </div>
               ))}
             </div>
             {/* Barre dettaglio */}
@@ -1268,6 +1271,106 @@ export default function StatisticheView() {
               ))}
             </div>
           </div>
+
+          {/* ── DRILL-DOWN OPERATORE ── */}
+          <AnimatePresence>
+          {opSelezionato && (() => {
+            const apOp = apMese.filter(a => a.operatori?.id === opSelezionato.id || a.operatore_id === opSelezionato.id);
+            const completatiOp = apOp.filter(a => a.stato === 'completato');
+            const incassoOp = completatiOp.reduce((s,a) => s + Number(a.prezzo_confermato || a.prezzo_proposto || 0), 0);
+            const mediaOp   = completatiOp.length > 0 ? incassoOp / completatiOp.length : 0;
+            // Servizi più fatti da questo operatore
+            const svCount = {};
+            apOp.forEach(a => (a.appuntamenti_servizi||[]).forEach(s => {
+              const n = s.servizi?.nome; if(n) svCount[n]=(svCount[n]||0)+1;
+            }));
+            const svTop = Object.entries(svCount).sort((a,b)=>b[1]-a[1]).slice(0,4);
+            // Giorno della settimana più affollato
+            const giorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+            const perGiorno = Array(7).fill(0);
+            apOp.forEach(a => { perGiorno[new Date(a.inizio).getDay()]++; });
+            const maxGiorno = Math.max(...perGiorno, 1);
+            // Clienti serviti da questo operatore
+            const clientiUnici = new Set(apOp.map(a => a.clienti?.id || a.cliente_id).filter(Boolean)).size;
+
+            return (
+              <motion.div
+                key={opSelezionato.nome}
+                initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }} exit={{ opacity:0, height:0 }}
+                style={{ overflow:'hidden', marginTop:20 }}
+              >
+                <div style={{ borderTop:`2px solid ${opSelezionato.colore}30`, paddingTop:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                    <div style={{ width:32, height:32, borderRadius:10, background:opSelezionato.colore,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize:14, fontWeight:800, color:'#fff' }}>
+                      {opSelezionato.nome[0]}
+                    </div>
+                    <div style={{ fontSize:15, fontWeight:700, color:'var(--text-primary)' }}>
+                      {opSelezionato.nome} — {meseLabel}
+                    </div>
+                    <button onClick={() => setOpSelezionato(null)}
+                      style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer',
+                        fontSize:18, color:'var(--text-muted)' }}>×</button>
+                  </div>
+
+                  {/* KPI operatore */}
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:16 }}>
+                    {[
+                      { label:'Appuntamenti', val: apOp.length,             color: opSelezionato.colore },
+                      { label:'Completati',   val: completatiOp.length,     color:'#059669' },
+                      { label:'Incasso',      val:`€${incassoOp.toFixed(0)}`,color:'#2563eb' },
+                      { label:'Media/sessione',val:`€${mediaOp.toFixed(0)}`,  color:'#7c3aed' },
+                      { label:'Clienti unici',val: clientiUnici,             color:'#d97706' },
+                      { label:'In attesa',    val: apOp.filter(a=>a.stato==='in attesa').length, color:'#d97706' },
+                      { label:'Cancellati',   val: apOp.filter(a=>a.stato==='cancellato').length, color:'#dc2626' },
+                      { label:'Tasso OK',     val:`${apOp.length>0?Math.round(completatiOp.length/apOp.length*100):0}%`, color:'#059669' },
+                    ].map(k => (
+                      <div key={k.label} style={{ ...glassCard, padding:'10px 12px' }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:4 }}>{k.label}</div>
+                        <div style={{ fontSize:18, fontWeight:800, color:k.color, letterSpacing:'-0.5px' }}>{k.val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Distribuzione per giorno settimana */}
+                  <div style={{ ...glassCard, padding:'14px 16px', marginBottom:12 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:10 }}>
+                      Distribuzione settimanale
+                    </div>
+                    <div style={{ display:'flex', alignItems:'flex-end', gap:6, height:50 }}>
+                      {perGiorno.map((cnt, i) => (
+                        <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, height:'100%', justifyContent:'flex-end' }}>
+                          <div style={{ width:'100%', borderRadius:4, background: opSelezionato.colore,
+                            height:`${(cnt/maxGiorno)*100}%`, minHeight: cnt>0?4:0, opacity: cnt>0?1:0.15 }}/>
+                          <div style={{ fontSize:9, fontWeight:600, color:'var(--text-muted)' }}>{giorni[i]}</div>
+                          {cnt > 0 && <div style={{ fontSize:9, fontWeight:700, color:opSelezionato.colore }}>{cnt}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Servizi top */}
+                  {svTop.length > 0 && (
+                    <div style={{ ...glassCard, padding:'14px 16px' }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:10 }}>
+                        Servizi più eseguiti
+                      </div>
+                      {svTop.map(([nome, cnt], i) => (
+                        <div key={nome} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                          <div style={{ fontSize:12, color:'var(--text-secondary)', minWidth:16, fontWeight:700 }}>{i+1}.</div>
+                          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)', flex:1 }}>{nome}</div>
+                          <div style={{ fontSize:12, fontWeight:700, color:opSelezionato.colore,
+                            background:`${opSelezionato.colore}18`, padding:'2px 8px', borderRadius:20 }}>{cnt}×</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })()}
+          </AnimatePresence>
         </motion.div>
       )}
 

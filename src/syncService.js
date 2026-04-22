@@ -6,26 +6,41 @@
  * - Tutte le letture vanno prima al DB locale, poi (se online) aggiorna dal server
  * - Tutte le scritture vanno al DB locale + coda se offline, o direttamente a Supabase se online
  * - Quando torna la connessione, svuota la coda e ri-scarica i dati freschi
+ *
+ * Tabelle sincronizzate:
+ *   clienti, animali (+ comportamento/comportamento_note), operatori, servizi, razze,
+ *   appuntamenti, primanota, appuntamenti_servizi, notifiche, lista_attesa
+ *
+ * Storage (mai in coda — gestiti direttamente):
+ *   animali-memo (note vocali), appuntamenti-foto (check-in fotografico)
  */
 
 import { supabase } from './supabaseClient';
 import { db } from './db';
 
 // ── Tabelle da sincronizzare ──────────────────────────────────
-const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi', 'notifiche'];
+const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi', 'notifiche', 'lista_attesa'];
 
 // ── Select per tabelle con join o campi specifici ────────────
-// animali:      * include i nuovi campi sanitari (allergie, vaccini,
-//               farmaci_in_corso, veterinario_nome, veterinario_tel)
-// appuntamenti: * include note, reminder_inviato, reminder_giorni_prima
-// notifiche:    sola lettura — inserite dal webhook WhatsApp server-side
+// animali:       include campi sanitari + nuovi campi comportamento e note vocali
+// appuntamenti:  include note, reminder, prezzo, metodo_pagamento
+// notifiche:     sola lettura — inserite dal webhook WhatsApp server-side
+// lista_attesa:  include join a clienti, animali, operatori
 const SELECT_MAP = {
   animali:      '*, razze(id, nome), clienti(id, nome, cognome)',
   appuntamenti: '*, clienti(nome, cognome), animali(nome, specie), operatori(id, nome, cognome, colore)',
   notifiche:    'id, tipo, appuntamento_id, messaggio, telefono_cliente, letto, created_at',
+  lista_attesa: '*, clienti(id, nome, cognome, telefono), animali(id, nome, specie), operatori(id, nome, colore)',
 };
 
-// ── Stato connessione ─────────────────────────────────────────
+// ── Tabelle in sola lettura (mai in coda scrittura) ──────────
+// notifiche: inserite dal webhook server-side
+// lista_attesa: ha la propria logica di aggiornamento diretto
+const TABELLE_READONLY = new Set(['notifiche']);
+
+// ── Tabelle che non vanno mai cancellate in blocco durante sync ─
+// lista_attesa: sincronizzata per delta, non in clear+bulkPut
+const TABELLE_DELTA = new Set(['lista_attesa']);
 let isOnline = navigator.onLine;
 const listeners = new Set();
 
@@ -74,8 +89,13 @@ async function syncTabella(tabella, select) {
     const { data, error } = await supabase.from(tabella).select(select);
     if (error) { console.error(`[Sync] Errore ${tabella}:`, error); return; }
     if (data) {
-      await db[tabella].clear();
-      await db[tabella].bulkPut(data);
+      if (TABELLE_DELTA.has(tabella)) {
+        // Delta sync: aggiorna/inserisce senza cancellare tutto
+        await db[tabella].bulkPut(data);
+      } else {
+        await db[tabella].clear();
+        await db[tabella].bulkPut(data);
+      }
     }
   } catch (e) {
     console.error(`[Sync] ${tabella}:`, e);
@@ -250,6 +270,11 @@ export async function inizializzaSync() {
 
   // Sync se online e sono passati più di 5 minuti dall'ultimo
   if (isOnline && minutiDallUltimoSync > 5) {
+    console.log('[Sync] Avvio sync iniziale...');
     syncAll();
+  } else if (isOnline) {
+    console.log(`[Sync] Skip — ultimo sync ${Math.round(minutiDallUltimoSync)}min fa`);
+  } else {
+    console.log('[Sync] Offline — uso dati locali');
   }
 }
