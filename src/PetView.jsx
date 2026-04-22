@@ -607,6 +607,13 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const mediaRecRef  = useRef(null);
   const chunksRef    = useRef([]);
 
+  // ── Riassunto AI ──
+  const [generando,     setGenerando]     = useState(null);   // path memo in elaborazione
+  const [aiRisultato,   setAiRisultato]   = useState(null);   // { trascrizione, riassunto, memoPath }
+  const [aiEdit,        setAiEdit]        = useState('');
+  const [salvandoAI,    setSalvandoAI]    = useState(false);
+  const [aiError,       setAiError]       = useState('');
+
   useEffect(() => {
     if (tab !== 'note_vocali') return;
     setLoadingMemo(true);
@@ -676,6 +683,48 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
     if (!window.confirm('Eliminare questo memo vocale?')) return;
     await supabase.storage.from('animali-memo').remove([memo.path]);
     setMemoVocali(prev => prev.filter(m => m.path !== memo.path));
+  };
+
+  const generaRiassunto = async (memo) => {
+    setGenerando(memo.path);
+    setAiError('');
+    try {
+      const res = await fetch('/api/riassunto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioUrl: memo.url,
+          pet: {
+            nome:               animale.nome,
+            specie:             animale.specie,
+            razza:              animale.razze?.nome || null,
+            allergie:           animale.allergie           || null,
+            farmaci_in_corso:   animale.farmaci_in_corso   || null,
+            comportamento_note: animale.comportamento_note || null,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Errore API');
+      setAiRisultato({ ...data, memoPath: memo.path });
+      setAiEdit(data.riassunto);
+    } catch(e) {
+      setAiError('Errore generazione: ' + e.message);
+    }
+    setGenerando(null);
+  };
+
+  const salvaRiassunto = async () => {
+    setSalvandoAI(true);
+    const { error } = await supabase.from('animali').update({
+      ultima_scheda_visita: aiEdit,
+      ultima_scheda_data:   new Date().toISOString(),
+    }).eq('id', animale.id);
+    if (!error) {
+      onUpdate({ ...animale, ultima_scheda_visita: aiEdit, ultima_scheda_data: new Date().toISOString() });
+    }
+    setAiRisultato(null);
+    setSalvandoAI(false);
   };
 
   // ── Scheda sanitaria (editabile) ──
@@ -1226,6 +1275,12 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
           {/* Lista memo salvati */}
           <div style={{...glass,padding:'16px 18px'}}>
             <div style={{...secLabel,marginBottom:12}}>Memo salvati</div>
+            {aiError && (
+              <div style={{background:'rgba(220,38,38,0.1)',border:'1px solid rgba(220,38,38,0.25)',
+                borderRadius:10,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:10}}>
+                {aiError}
+              </div>
+            )}
             {loadingMemo ? (
               <div style={{fontSize:13,color:'var(--text-muted)',textAlign:'center',padding:'20px 0'}}>Caricamento...</div>
             ) : memoVocali.length === 0 ? (
@@ -1242,7 +1297,22 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
                       ✕
                     </button>
                   </div>
-                  <audio controls src={memo.url} style={{width:'100%',borderRadius:6}}/>
+                  <audio controls src={memo.url} style={{width:'100%',borderRadius:6,marginBottom:8}}/>
+                  {/* ── Bottone genera scheda AI ── */}
+                  <button
+                    onClick={() => generaRiassunto(memo)}
+                    disabled={!!generando}
+                    style={{width:'100%',padding:'9px',borderRadius:10,cursor:generando?'default':'pointer',
+                      fontFamily:'inherit',fontWeight:600,fontSize:12,
+                      display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+                      border:'1px solid rgba(139,92,246,0.3)',
+                      background: generando === memo.path ? 'rgba(139,92,246,0.05)' : 'rgba(139,92,246,0.1)',
+                      color:'#7c3aed', opacity: (generando && generando !== memo.path) ? 0.4 : 1,
+                      transition:'all 0.2s'}}>
+                    {generando === memo.path
+                      ? <><span style={{display:'inline-block',animation:'spin 1s linear infinite'}}>⟳</span> Elaborazione in corso...</>
+                      : '✨ Genera scheda visita'}
+                  </button>
                 </div>
               );
             })}
@@ -1726,6 +1796,60 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
                 <button onClick={saveEditForm} disabled={savingEdit}
                   style={{...btnPrimary, flex:2, opacity:savingEdit?0.7:1}}>
                   {savingEdit ? 'Salvataggio...' : '✓ Salva modifiche'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal riassunto AI ── */}
+      <AnimatePresence>
+        {aiRisultato && (
+          <motion.div
+            initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+            style={{position:'fixed',inset:0,zIndex:999,background:'rgba(0,0,0,0.5)',
+              display:'flex',alignItems:'flex-end',justifyContent:'center'}}
+            onClick={()=>setAiRisultato(null)}>
+            <motion.div
+              initial={{y:80,opacity:0}} animate={{y:0,opacity:1}} exit={{y:80,opacity:0}}
+              transition={{type:'spring',stiffness:320,damping:30}}
+              onClick={e=>e.stopPropagation()}
+              style={{...glass,width:'100%',maxWidth:520,borderRadius:'24px 24px 0 0',
+                padding:'24px 20px 32px',maxHeight:'82vh',overflowY:'auto',
+                paddingBottom:'calc(32px + env(safe-area-inset-bottom))'}}>
+
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                <span style={{fontSize:22}}>✨</span>
+                <div style={{fontWeight:700,fontSize:16,color:'var(--text-primary)'}}>
+                  Scheda visita generata
+                </div>
+              </div>
+
+              {/* Anteprima trascrizione */}
+              <div style={{...glassCard,padding:'10px 14px',marginBottom:14}}>
+                <div style={{...secLabel,marginBottom:4}}>🎙️ Trascrizione</div>
+                <div style={{fontSize:12,color:'var(--text-secondary)',lineHeight:1.6,fontStyle:'italic'}}>
+                  "{aiRisultato.trascrizione}"
+                </div>
+              </div>
+
+              <div style={{...secLabel,marginBottom:6}}>📋 Scheda — modifica se necessario</div>
+              <textarea
+                value={aiEdit}
+                onChange={e => setAiEdit(e.target.value)}
+                rows={10}
+                style={{...inputStyle,lineHeight:1.7,resize:'vertical',fontSize:13,marginBottom:14}}
+              />
+
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>setAiRisultato(null)}
+                  style={{...btnSecondary,flex:1,padding:'12px'}}>
+                  Annulla
+                </button>
+                <button onClick={salvaRiassunto} disabled={salvandoAI}
+                  style={{...btnPrimary,flex:2,padding:'12px',opacity:salvandoAI?0.7:1}}>
+                  {salvandoAI ? 'Salvataggio...' : '💾 Salva scheda'}
                 </button>
               </div>
             </motion.div>
