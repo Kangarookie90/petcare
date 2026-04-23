@@ -647,6 +647,9 @@ export default function App() {
           min-height: 100vh;
           position: relative;
           z-index: 1;
+          width: 100%;
+          max-width: 100%;
+          overflow-x: hidden;
         }
         .sidebar {
           display: none;
@@ -1048,7 +1051,7 @@ export default function App() {
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                      style={{ overflow: "hidden" }}
+                      style={{ overflow: "hidden", maxWidth: "100%" }}
                     >
                       {NAV_EXTRA.map((item) => (
                         <motion.button
