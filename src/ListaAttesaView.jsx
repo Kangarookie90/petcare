@@ -327,7 +327,7 @@ export default function ListaAttesaView({ onNavigateToCalendario }) {
 
   return (
     <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
-      style={{ padding:'0 0 2rem', maxWidth:720, margin:'0 auto' }}>
+      style={{ padding:'0 0 2rem', width:'100%' }}>
 
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>

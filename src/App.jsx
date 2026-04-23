@@ -251,7 +251,7 @@ function HomeView() {
   const COLORI_STATI = { confermato: "#2563eb", "in attesa": "#d97706", completato: "#059669", cancellato: "#dc2626" };
 
   return (
-    <motion.div style={{ padding: "0 0 2rem", maxWidth: 720, margin: "0 auto" }}
+    <motion.div style={{ padding: "0 0 2rem", width: "100%" }}
       variants={listVariants} initial="initial" animate="animate">
 
       {/* Header */}
@@ -767,15 +767,17 @@ export default function App() {
         .bottom-nav {
           position: fixed;
           bottom: 20px;
-          left: 50%;
-          transform: translateX(-50%);
+          left: 16px;
+          right: 16px;
+          transform: none;
           display: flex;
           flex-direction: column;
           gap: 0;
           border-radius: 26px;
           z-index: 100;
-          width: calc(100% - 32px);
+          width: auto;
           max-width: 420px;
+          margin: 0 auto;
           backdrop-filter: blur(40px) saturate(2);
           -webkit-backdrop-filter: blur(40px) saturate(2);
           overflow: hidden;

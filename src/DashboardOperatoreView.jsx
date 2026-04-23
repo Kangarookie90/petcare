@@ -108,7 +108,7 @@ export default function DashboardOperatoreView() {
   if (!opSel) {
     return (
       <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
-        style={{ padding:'0 0 2rem', maxWidth:720, margin:'0 auto' }}>
+        style={{ padding:'0 0 2rem', width:'100%' }}>
         <div style={{ marginBottom:24 }}>
           <h1 style={{ fontSize:26, fontWeight:700, color:'var(--text-primary)', margin:'0 0 4px', letterSpacing:'-0.5px' }}>
             👤 Dashboard Operatore
@@ -157,7 +157,7 @@ export default function DashboardOperatoreView() {
 
   return (
     <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
-      style={{ padding:'0 0 2rem', maxWidth:720, margin:'0 auto' }}>
+      style={{ padding:'0 0 2rem', width:'100%' }}>
 
       {/* Header operatore */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>

@@ -123,7 +123,7 @@ Rispondi SOLO con un oggetto JSON valido, senza testo aggiuntivo, senza backtick
   const tonoSel = TONI.find(t => t.id === tono);
 
   return (
-    <div style={{ padding: '0 0 2rem', maxWidth: 680, margin: '0 auto' }}>
+    <div style={{ padding: '0 0 2rem', width: '100%' }}>
 
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: '1.5rem' }}>
