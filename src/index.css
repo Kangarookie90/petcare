@@ -63,7 +63,7 @@ body {
 
 /* ── Tablet font scaling (640px–1024px) ── */
 @media (min-width: 640px) and (max-width: 1024px) {
-  html { font-size: 18px; }
+  html { font-size: 19px; }
   .sidebar-item { font-size: 16px !important; }
   .sidebar-label { font-size: 16px !important; }
 }

@@ -536,7 +536,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 14, scale: 0.98 }}
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{ ...glass, padding: 24, width: '100%', maxWidth: 560, maxHeight: '92dvh', overflowY: 'auto' }}
+        style={{ ...glass, padding: 24, width: '100%', maxWidth: 680, maxHeight: '92dvh', overflowY: 'auto', overflowX: 'hidden' }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -549,8 +549,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         </div>
 
         {/* Data e ora */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
-          <div style={{ gridColumn: '1/3' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div>
             <div style={secLabel}>Data</div>
             <input type="date" value={f.data} onChange={e => set('data', e.target.value)} style={inputStyle} />
           </div>
