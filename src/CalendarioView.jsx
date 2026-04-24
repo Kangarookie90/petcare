@@ -258,7 +258,10 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   const [showNuovoAnimale, setShowNuovoAnimale] = useState(false);
 
   const initClienteId   = appuntamento?.clienti?.id   || appuntamento?.cliente_id   || '';
-  const initAnimaleId   = appuntamento?.animali?.id   || appuntamento?.animale_id   || '';
+  // Supporto multi-animale: legge da appuntamenti_animali se disponibile, altrimenti fallback su animale_id
+  const initAnimaliIds  = appuntamento?._animaliIds?.length > 0
+    ? appuntamento._animaliIds
+    : (appuntamento?.animali?.id ? [appuntamento.animali.id] : []);
   const initOperatoreId = appuntamento?.operatori?.id || appuntamento?.operatore_id || '';
   const initData = appuntamento?.inizio
     ? new Date(appuntamento.inizio).toISOString().split('T')[0]
@@ -269,7 +272,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
   const [f, setF] = useState({
     cliente_id:    initClienteId,
-    animale_id:    initAnimaleId,
+    animali_ids:   initAnimaliIds,
     operatore_id:  initOperatoreId,
     servizi_ids:   appuntamento?.servizi_ids || (appuntamento?.servizio_id ? [appuntamento.servizio_id] : []),
     data:          initData,
@@ -356,13 +359,21 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
             .select('servizio_id, prezzo_applicato')
             .eq('appuntamento_id', appuntamento.id)
         );
+        promises.push(
+          supabase.from('appuntamenti_animali')
+            .select('animale_id')
+            .eq('appuntamento_id', appuntamento.id)
+        );
       }
-      const [cl, sv, rz, apSv] = await Promise.all(promises);
+      const [cl, sv, rz, apSv, apAn] = await Promise.all(promises);
       setClienti(cl.data || []);
       setServizi(sv.data || []);
       setRazze(rz.data || []);
       if (apSv?.data?.length > 0) {
         set('servizi_ids', apSv.data.map(r => r.servizio_id));
+      }
+      if (apAn?.data?.length > 0) {
+        set('animali_ids', apAn.data.map(r => r.animale_id));
       }
       setServiziCaricati(true);
       supabase.from('animali')
@@ -413,7 +424,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
   const save = async () => {
     if (!f.blocco_orario && !f.cliente_id) { setError('Seleziona un cliente o attiva "Blocca orario"'); return; }
-    if (!f.blocco_orario && !f.animale_id) { setError('Seleziona un animale'); return; }
+    if (!f.blocco_orario && f.animali_ids.length === 0) { setError('Seleziona almeno un animale'); return; }
     if (!f.operatore_id) { setError('Seleziona un operatore'); return; }
     setSaving(true); setError('');
 
@@ -421,9 +432,12 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       const inizio = new Date(`${f.data}T${f.ora_inizio}`);
       const fine   = new Date(inizio.getTime() + f.durata_minuti * 60000);
 
+      // animale_id principale = primo selezionato (retrocompatibilità)
+      const animaleIdPrimario = f.blocco_orario ? null : (f.animali_ids[0] || null);
+
       const payload = {
         cliente_id:             f.blocco_orario ? null : f.cliente_id,
-        animale_id:             f.blocco_orario ? null : f.animale_id,
+        animale_id:             animaleIdPrimario,
         operatore_id:           f.operatore_id,
         servizio_id:            f.servizi_ids[0] || null,
         inizio:                 inizio.toISOString(),
@@ -453,6 +467,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       if (result.error) { setError(result.error.message); setSaving(false); return; }
 
       const apId = result.data.id;
+
+      // Salva servizi
       await supabase.from('appuntamenti_servizi').delete().eq('appuntamento_id', apId);
       if (f.servizi_ids.length > 0) {
         const righeServizi = f.servizi_ids.map(sid => {
@@ -462,17 +478,26 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         await supabase.from('appuntamenti_servizi').insert(righeServizi);
       }
 
-      const serviziAssociati = f.servizi_ids.map(sid => servizi.find(x => x.id === sid)).filter(Boolean);
-      onSaved({ ...result.data, _serviziMultipli: serviziAssociati });
+      // Salva animali multipli nella junction table
+      await supabase.from('appuntamenti_animali').delete().eq('appuntamento_id', apId);
+      if (!f.blocco_orario && f.animali_ids.length > 0) {
+        await supabase.from('appuntamenti_animali').insert(
+          f.animali_ids.map(aid => ({ appuntamento_id: apId, animale_id: aid }))
+        );
+      }
 
-      // Se lo stato diventa "completato" → mostra check-in foto + suggerimento
-      if (f.stato === 'completato' && f.animale_id) {
+      const serviziAssociati = f.servizi_ids.map(sid => servizi.find(x => x.id === sid)).filter(Boolean);
+      // Arricchisci il risultato con tutti gli animali per aggiornare il calendario
+      const animaliAssociati = f.animali_ids.map(aid => [...animali, ...tuttiAnimali].find(x => x.id === aid)).filter(Boolean);
+      onSaved({ ...result.data, _serviziMultipli: serviziAssociati, _animaliIds: f.animali_ids, _animaliMultipli: animaliAssociati });
+
+      // Se completato → suggerimento per ogni animale (usa il primo come principale)
+      if (f.stato === 'completato' && f.animali_ids.length > 0) {
         setShowFotoCheckin(true);
-        // Calcola suggerimento in background
-        calcolaSuggerimento(f.animale_id, result.data.inizio).then(sug => {
+        calcolaSuggerimento(f.animali_ids[0], result.data.inizio).then(sug => {
           if (sug) setSuggerimentoData({ ...sug, apData: result.data });
         });
-        return; // non chiude il modal — lo chiude l'utente dopo foto/suggerimento
+        return;
       }
       onClose();
     } catch (err) {
@@ -492,13 +517,14 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
   const clienteSelezionato = clienti.find(c => c.id === f.cliente_id)
     || (appuntamento?.clienti?.id === f.cliente_id ? appuntamento.clienti : null);
 
+  // Quando viene selezionato UN SOLO animale, applica i suoi preset (servizi/durata riservati)
   useEffect(() => {
-    if (!f.animale_id || isEdit) return;
-    const a = [...animali, ...tuttiAnimali].find(x => x.id === f.animale_id);
+    if (f.animali_ids.length !== 1 || isEdit) return;
+    const a = [...animali, ...tuttiAnimali].find(x => x.id === f.animali_ids[0]);
     if (!a) return;
     if (a.servizi_riservati_ids?.length > 0) { set('servizi_ids', a.servizi_riservati_ids); set('durata_auto', true); }
     if (a.durata_riservata) { set('durata_minuti', a.durata_riservata); set('durata_auto', false); }
-  }, [f.animale_id, animali]);
+  }, [f.animali_ids, animali]);
 
   useEffect(() => {
     if (!f.cliente_id || !clienti.length) return;
@@ -638,7 +664,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               return filtrati.length > 0 ? (
                 <div style={{ ...glassCard, marginTop: 4, maxHeight: 200, overflowY: 'auto' }}>
                   {filtrati.map(a => (
-                    <button key={a.id} onMouseDown={e => { e.preventDefault(); set('cliente_id', a.cliente_id); set('animale_id', a.id); setCercaAnimaleQuery(''); }}
+                    <button key={a.id} onMouseDown={e => { e.preventDefault(); set('cliente_id', a.cliente_id); set('animali_ids', [a.id]); setCercaAnimaleQuery(''); }}
                       style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none',
                         borderBottom: '1px solid var(--card-border-sm)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display:'flex', alignItems:'center', gap:6 }}>
@@ -707,11 +733,19 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           </div>
         )}
 
-        {/* Selezione animale */}
+        {/* Selezione animale — multi-select */}
         {!f.blocco_orario && f.cliente_id && (
           <div style={{ marginBottom: 16, marginTop: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={secLabel}>Animale *</div>
+              <div style={secLabel}>
+                Animale{animali.length > 1 ? 'i' : ''} *
+                {f.animali_ids.length > 1 && (
+                  <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, background: 'rgba(37,99,235,0.15)',
+                    color: '#2563eb', borderRadius: 6, padding: '1px 6px' }}>
+                    {f.animali_ids.length} selezionati
+                  </span>
+                )}
+              </div>
               {!showNuovoAnimale && (
                 <button onClick={() => setShowNuovoAnimale(true)} style={{ fontSize: 11, fontWeight: 600, color: '#059669',
                   background: 'rgba(5,150,105,0.1)', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -723,48 +757,72 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               ? <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>Nessun animale per questo cliente</div>
               : (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {animali.map(a => (
-                    <button key={a.id} onClick={() => set('animale_id', a.id)} style={{
-                      padding: '8px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-                      border: '1px solid var(--card-border)',
-                      background: f.animale_id === a.id ? 'rgba(37,99,235,0.15)' : 'var(--card-bg-sm)',
-                      color: f.animale_id === a.id ? '#2563eb' : 'var(--text-primary)',
-                      boxShadow: f.animale_id === a.id ? '0 2px 0 rgba(255,255,255,0.9) inset' : 'none',
-                    }}>
-                      {a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}
-                      {a.razze?.nome && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>({a.razze.nome})</span>}
-                      {(a.servizi_riservati_ids?.length > 0 || a.durata_riservata) && (
-                        <span style={{ fontSize: 10, background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderRadius: 6, padding: '1px 5px', fontWeight: 700 }}>★</span>
-                      )}
-                    </button>
-                  ))}
+                  {animali.map(a => {
+                    const sel = f.animali_ids.includes(a.id);
+                    return (
+                      <button key={a.id} onClick={() => {
+                        set('animali_ids', sel
+                          ? f.animali_ids.filter(x => x !== a.id)
+                          : [...f.animali_ids, a.id]
+                        );
+                      }} style={{
+                        padding: '8px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                        border: `1.5px solid ${sel ? 'rgba(37,99,235,0.5)' : 'var(--card-border)'}`,
+                        background: sel ? 'rgba(37,99,235,0.15)' : 'var(--card-bg-sm)',
+                        color: sel ? '#2563eb' : 'var(--text-primary)',
+                        boxShadow: sel ? '0 2px 0 rgba(255,255,255,0.9) inset' : 'none',
+                        display: 'flex', alignItems: 'center', gap: 6,
+                      }}>
+                        <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${sel ? '#2563eb' : 'var(--text-muted)'}`,
+                          background: sel ? '#2563eb' : 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {sel && <span style={{ fontSize: 10, color: '#fff', lineHeight: 1 }}>✓</span>}
+                        </span>
+                        {a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}
+                        {a.razze?.nome && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>({a.razze.nome})</span>}
+                        {(a.servizi_riservati_ids?.length > 0 || a.durata_riservata) && (
+                          <span style={{ fontSize: 10, background: 'rgba(37,99,235,0.15)', color: '#2563eb', borderRadius: 6, padding: '1px 5px', fontWeight: 700 }}>★</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             <AnimatePresence>
               {showNuovoAnimale && (
                 <FormNuovoAnimale clienteId={f.cliente_id} razze={razze}
-                  onSaved={(a) => { setAnimali(prev => [...prev, a]); set('animale_id', a.id); setShowNuovoAnimale(false); }}
+                  onSaved={(a) => { setAnimali(prev => [...prev, a]); set('animali_ids', [...f.animali_ids, a.id]); setShowNuovoAnimale(false); }}
                   onCancel={() => setShowNuovoAnimale(false)} />
               )}
             </AnimatePresence>
           </div>
         )}
 
-        {/* Alert problemi animale */}
+        {/* Alert problemi animali selezionati */}
         {(() => {
-          const a = animali.find(x => x.id === f.animale_id);
-          if (!a?.problemi_salute?.trim() && !a?.problemi_carattere?.trim()) return null;
+          const animaliConProblemi = f.animali_ids
+            .map(id => animali.find(x => x.id === id))
+            .filter(a => a?.problemi_salute?.trim() || a?.problemi_carattere?.trim());
+          if (animaliConProblemi.length === 0) return null;
           return (
             <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
               style={{ marginBottom: 16, borderRadius: 14, background: 'rgba(234,179,8,0.10)',
                 border: '1.5px solid rgba(234,179,8,0.35)', padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <div style={{ fontSize: 20, flexShrink: 0, lineHeight: 1 }}>⚠️</div>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  Attenzione — note sull'animale
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  Attenzione — note sugli animali
                 </div>
-                {a.problemi_salute && <div style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: a.problemi_carattere ? 4 : 0 }}><span style={{ fontWeight: 600 }}>Salute:</span> {a.problemi_salute}</div>}
-                {a.problemi_carattere && <div style={{ fontSize: 12, color: 'var(--text-primary)' }}><span style={{ fontWeight: 600 }}>Carattere:</span> {a.problemi_carattere}</div>}
+                {animaliConProblemi.map(a => (
+                  <div key={a.id} style={{ marginBottom: animaliConProblemi.length > 1 ? 8 : 0 }}>
+                    {animaliConProblemi.length > 1 && (
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
+                        {a.specie === 'gatto' ? '🐈' : '🐕'} {a.nome}
+                      </div>
+                    )}
+                    {a.problemi_salute && <div style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: a.problemi_carattere ? 2 : 0 }}><span style={{ fontWeight: 600 }}>Salute:</span> {a.problemi_salute}</div>}
+                    {a.problemi_carattere && <div style={{ fontSize: 12, color: 'var(--text-primary)' }}><span style={{ fontWeight: 600 }}>Carattere:</span> {a.problemi_carattere}</div>}
+                  </div>
+                ))}
               </div>
             </motion.div>
           );
@@ -1116,7 +1174,8 @@ export default function CalendarioView() {
         clienti(id,nome,cognome),
         animali(id,nome,specie,problemi_carattere,problemi_salute),
         operatori(id,nome,cognome,colore),
-        appuntamenti_servizi(servizio_id, prezzo_applicato, servizi(id,nome,prezzo,durata_minuti))
+        appuntamenti_servizi(servizio_id, prezzo_applicato, servizi(id,nome,prezzo,durata_minuti)),
+        appuntamenti_animali(animale_id, animali(id,nome,specie,problemi_carattere,problemi_salute))
       `).neq('stato', 'cancellato'),
     ]);
     const ops = op.data || [];
@@ -1133,23 +1192,41 @@ export default function CalendarioView() {
     const colore = prezzoOk ? '#6b7280' : coloreBase;
     const serviziNomi = (a._serviziMultipli || a.appuntamenti_servizi || [])
       .map(r => (r.servizi || r)?.nome).filter(Boolean);
+
+    // Animali: usa la junction table se disponibile, altrimenti fallback su animali singolo
+    const animaliList = a._animaliMultipli
+      || (a.appuntamenti_animali?.length > 0
+          ? a.appuntamenti_animali.map(r => r.animali).filter(Boolean)
+          : (a.animali ? [a.animali] : []));
+    const animaliIds = a._animaliIds
+      || (a.appuntamenti_animali?.length > 0
+          ? a.appuntamenti_animali.map(r => r.animale_id)
+          : (a.animale_id ? [a.animale_id] : []));
+
+    const animaleNome = animaliList.length > 1
+      ? animaliList.map(x => x.nome).join(' & ')
+      : (animaliList[0]?.nome || '');
+
+    const hasAlert = animaliList.some(x => x?.problemi_salute || x?.problemi_carattere);
+
     return {
       id:              a.id,
-      title:           a.animali?.nome || 'Appuntamento',
+      title:           animaleNome || 'Appuntamento',
       start:           a.inizio,
       end:             a.fine,
       backgroundColor: colore + 'dd',
       borderColor:     colore,
       textColor:       '#fff',
       extendedProps:   {
-        appuntamento:  a,
+        appuntamento:  { ...a, _animaliIds: animaliIds, _animaliMultipli: animaliList },
         coloreBase,
         prezzoOk,
         operatoreId:   a.operatori?.id || '',
-        animaleNome:   a.animali?.nome || '',
+        animaleNome,
+        animaliCount:  animaliList.length,
         servizioNome:  serviziNomi,
         operatoreNome: op?.nome || '',
-        hasAlert:      !!(a.animali?.problemi_salute || a.animali?.problemi_carattere),
+        hasAlert,
       },
     };
   });
@@ -1405,7 +1482,7 @@ export default function CalendarioView() {
             height="calc(100dvh - 130px)"
             expandRows={true}
             eventContent={({ event, timeText }) => {
-              const { animaleNome, servizioNome, operatoreNome, prezzoOk, hasAlert } = event.extendedProps;
+              const { animaleNome, animaliCount, servizioNome, operatoreNome, prezzoOk, hasAlert } = event.extendedProps;
               const servizi = Array.isArray(servizioNome) ? servizioNome : (servizioNome ? [servizioNome] : []);
               return (
                 <div style={{ padding: '3px 6px', height: '100%', display: 'flex', flexDirection: 'column',
@@ -1423,6 +1500,10 @@ export default function CalendarioView() {
                       </div>
                     )}
                     {hasAlert && <div style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}>⚠️</div>}
+                    {animaliCount > 1 && (
+                      <div style={{ fontSize: 9, fontWeight: 800, flexShrink: 0, background: 'rgba(255,255,255,0.25)',
+                        borderRadius: 4, padding: '1px 4px', lineHeight: 1.4 }}>×{animaliCount}</div>
+                    )}
                     <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                       {animaleNome}
                     </span>

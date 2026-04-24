@@ -19,23 +19,24 @@ import { supabase } from './supabaseClient';
 import { db } from './db';
 
 // ── Tabelle da sincronizzare ──────────────────────────────────
-const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi', 'notifiche', 'lista_attesa'];
+const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi', 'appuntamenti_animali', 'notifiche', 'lista_attesa'];
 
 // ── Select per tabelle con join o campi specifici ────────────
-// animali:       include campi sanitari + nuovi campi comportamento e note vocali
-// appuntamenti:  include note, reminder, prezzo, metodo_pagamento
-// notifiche:     sola lettura — inserite dal webhook WhatsApp server-side
-// lista_attesa:  include join a clienti, animali, operatori
+// animali:               include campi sanitari + nuovi campi comportamento e note vocali
+// appuntamenti:          include note, reminder, prezzo, metodo_pagamento
+// appuntamenti_animali:  junction table multi-animale — include dati animale per uso offline
+// notifiche:             sola lettura — inserite dal webhook WhatsApp server-side
+// lista_attesa:          include join a clienti, animali, operatori
 const SELECT_MAP = {
-  animali:      '*, razze(id, nome), clienti(id, nome, cognome)',
-  appuntamenti: '*, clienti(nome, cognome), animali(nome, specie), operatori(id, nome, cognome, colore)',
-  notifiche:    'id, tipo, appuntamento_id, messaggio, telefono_cliente, letto, created_at',
-  lista_attesa: '*, clienti(id, nome, cognome, telefono), animali(id, nome, specie), operatori(id, nome, colore)',
+  animali:              '*, razze(id, nome), clienti(id, nome, cognome)',
+  appuntamenti:         '*, clienti(nome, cognome), animali(nome, specie), operatori(id, nome, cognome, colore)',
+  appuntamenti_animali: 'id, appuntamento_id, animale_id, animali(id, nome, specie, problemi_carattere, problemi_salute)',
+  notifiche:            'id, tipo, appuntamento_id, messaggio, telefono_cliente, letto, created_at',
+  lista_attesa:         '*, clienti(id, nome, cognome, telefono), animali(id, nome, specie), operatori(id, nome, colore)',
 };
 
 // ── Tabelle in sola lettura (mai in coda scrittura) ──────────
 // notifiche: inserite dal webhook server-side
-// lista_attesa: ha la propria logica di aggiornamento diretto
 const TABELLE_READONLY = new Set(['notifiche']);
 
 // ── Tabelle che non vanno mai cancellate in blocco durante sync ─
