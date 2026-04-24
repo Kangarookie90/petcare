@@ -14,6 +14,7 @@
   --input-border:   rgba(255,255,255,0.8);
   --search-bg:      rgba(255,255,255,0.38);
   --placeholder:    rgba(20,50,130,0.4);
+  --btn-bar-bg:     #d6e4f7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -32,6 +33,7 @@
     --input-border:   rgba(100,150,255,0.2);
     --search-bg:      rgba(20,45,100,0.4);
     --placeholder:    rgba(160,200,255,0.35);
+    --btn-bar-bg:     #0d1f55;
   }
 }
 
@@ -156,6 +158,16 @@ body {
   .date-time-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Impedisce che gli input date/time nativi escano dal loro contenitore */
+input[type="date"],
+input[type="time"] {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* ── Tablet: eventi calendario più leggibili (vista settimanale) ── */
