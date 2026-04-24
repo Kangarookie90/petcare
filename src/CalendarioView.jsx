@@ -516,19 +516,23 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     if (tot > 0) set('prezzo_proposto', String(tot));
   }, [f.servizi_ids, servizi]);
 
+  const isMobile = window.innerWidth < 640;
   const isTablet = window.innerWidth >= 640 && window.innerWidth < 1280;
+  // Su tablet la sidebar occupa spazio a sinistra: lo leggiamo dal DOM
+  const sidebarOffset = isTablet ? (document.querySelector('.sidebar')?.offsetWidth ?? 240) : 0;
 
   return (
     <motion.div
   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
   drag={false}                          // ← blocca il drag su touch
   onPan={() => {}}                      // ← assorbe eventuali pan gesture
-  style={{ position: 'fixed', inset: 0, zIndex: 200,
+  style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: sidebarOffset, zIndex: 200,
     background: 'rgba(10,24,64,0.45)',
     WebkitBackdropFilter: 'blur(10px)',
     backdropFilter: 'blur(10px)',
     display: 'flex', alignItems: 'center',
-    justifyContent: 'center', padding: 20,
+    justifyContent: 'center',
+    padding: isMobile ? '12px 12px calc(80px + env(safe-area-inset-bottom)) 12px' : 20,
     touchAction: 'pan-y',
   }}
   onClick={e => e.target === e.currentTarget && onClose()}
@@ -538,7 +542,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 14, scale: 0.98 }}
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{ ...glass, padding: 24, width: '100%', maxWidth: isTablet ? 800 : 680, maxHeight: '92dvh', overflowY: 'auto', overflowX: 'hidden' }}
+        style={{ ...glass, padding: isMobile ? 16 : 24, width: '100%', maxWidth: isTablet ? 800 : 680, maxHeight: isMobile ? 'calc(100dvh - 100px - env(safe-area-inset-bottom))' : '92dvh', overflowY: 'auto', overflowX: 'hidden' }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -552,13 +556,13 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
         {/* Data e ora */}
         <div className="date-time-grid" style={{ marginBottom: 16 }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={secLabel}>Data</div>
-            <input type="date" value={f.data} onChange={e => set('data', e.target.value)} style={inputStyle} />
+            <input type="date" value={f.data} onChange={e => set('data', e.target.value)} style={{ ...inputStyle, fontSize: 13 }} />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={secLabel}>Ora inizio</div>
-            <input type="time" value={f.ora_inizio} onChange={e => set('ora_inizio', e.target.value)} style={inputStyle} />
+            <input type="time" value={f.ora_inizio} onChange={e => set('ora_inizio', e.target.value)} style={{ ...inputStyle, fontSize: 13 }} />
           </div>
         </div>
 
@@ -934,7 +938,10 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
             padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>{error}</div>
         )}
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, position: 'sticky', bottom: 0,
+          background: 'var(--card-bg)', marginLeft: isMobile ? -16 : -24, marginRight: isMobile ? -16 : -24,
+          padding: isMobile ? '12px 16px' : '12px 24px',
+          borderTop: '1px solid var(--card-border)', marginTop: 4 }}>
           {isEdit && <button onClick={deleteAppt} style={{ ...btnDanger, padding: '11px 14px' }}>Elimina</button>}
           <button onClick={onClose} style={{ ...btnSecondary, flex: 1 }}>Annulla</button>
           <button onClick={save} disabled={loading} style={{ ...btnPrimary, flex: 2, opacity: loading ? 0.7 : 1 }}>
