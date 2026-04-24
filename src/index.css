@@ -144,3 +144,29 @@ body {
     padding-bottom: calc(16px + env(safe-area-inset-bottom)) !important;
   }
 }
+/* ── Date/time grid nel modal appuntamento ── */
+.date-time-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Su smartphone: stack verticale per evitare overflow del campo ora */
+@media (max-width: 639px) {
+  .date-time-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Tablet: eventi calendario più leggibili (vista settimanale) ── */
+@media (min-width: 640px) and (max-width: 1280px) {
+  /* Slot più alti → più spazio verticale per i contenuti degli eventi */
+  .fc .fc-timegrid-slot {
+    height: 2.4em !important;
+  }
+
+  /* Padding leggermente maggiore dentro gli eventi */
+  .fc .fc-event-main > div {
+    padding: 4px 7px !important;
+  }
+}

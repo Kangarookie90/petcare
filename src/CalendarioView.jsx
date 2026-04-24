@@ -516,6 +516,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     if (tot > 0) set('prezzo_proposto', String(tot));
   }, [f.servizi_ids, servizi]);
 
+  const isTablet = window.innerWidth >= 640 && window.innerWidth < 1280;
+
   return (
     <motion.div
   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -536,7 +538,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 14, scale: 0.98 }}
         transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{ ...glass, padding: 24, width: '100%', maxWidth: 680, maxHeight: '92dvh', overflowY: 'auto', overflowX: 'hidden' }}
+        style={{ ...glass, padding: 24, width: '100%', maxWidth: isTablet ? 800 : 680, maxHeight: '92dvh', overflowY: 'auto', overflowX: 'hidden' }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -549,7 +551,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         </div>
 
         {/* Data e ora */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+        <div className="date-time-grid" style={{ marginBottom: 16 }}>
           <div>
             <div style={secLabel}>Data</div>
             <input type="date" value={f.data} onChange={e => set('data', e.target.value)} style={inputStyle} />
@@ -1405,20 +1407,20 @@ export default function CalendarioView() {
                       </div>
                     )}
                     {hasAlert && <div style={{ fontSize: 11, flexShrink: 0, lineHeight: 1, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}>⚠️</div>}
-                    <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                       {animaleNome}
                     </span>
                     {operatoreNome && filtroOp === 'tutti' && (
-                      <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.75, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.75, whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {operatoreNome}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.80, whiteSpace: 'nowrap', overflow: 'hidden', lineHeight: 1.2 }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.80, whiteSpace: 'nowrap', overflow: 'hidden', lineHeight: 1.2 }}>
                     {timeText}
                   </div>
                   {servizi.length > 0 && (
-                    <div style={{ fontSize: 10, opacity: 0.78, lineHeight: 1.3 }}>
+                    <div style={{ fontSize: 11, opacity: 0.78, lineHeight: 1.3 }}>
                       <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{servizi[0]}</div>
                       {servizi.length > 1 && (
                         <div style={{ opacity: 0.65, fontStyle: 'italic' }}>+{servizi.length - 1} {servizi.length - 1 === 1 ? 'altro' : 'altri'}</div>
