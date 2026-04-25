@@ -12,7 +12,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import itLocale from '@fullcalendar/core/locales/it';
 import { supabase } from './supabaseClient';
-import RichiamataAI from './RichiamataAI';
+import RichiamataAI from './RichiamataAi';
 
 // ── Colori operatori ─────────────────────────────────────────
 const COLORI_OP = ['#2563eb','#059669','#d97706','#7c3aed','#db2777','#0891b2'];
