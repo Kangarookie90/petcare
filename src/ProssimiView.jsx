@@ -348,7 +348,7 @@ export default function ProssimiView() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -8, scale: 0.97 }}
                 transition={{ duration: 0.15 }}
-                style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, ...glass, padding: 6, minWidth: 150, zIndex: 50 }}
+                style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, ...glass, background: 'var(--dropdown-bg, var(--card-bg))', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', padding: 6, minWidth: 150, zIndex: 50 }}
               >
                 {PERIODI.map(p => {
                   const sel = periodo === p.id;
@@ -417,8 +417,11 @@ export default function ProssimiView() {
                 exit={{ opacity: 0, y: -8, scale: 0.97 }}
                 transition={{ duration: 0.15 }}
                 style={{
-                  position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-                  ...glass, padding: 6, minWidth: 200, zIndex: 50,
+                  position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+                  ...glass,
+                  background: 'var(--dropdown-bg, var(--card-bg))',
+                  backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                  padding: 6, minWidth: 200, zIndex: 50,
                 }}
               >
                 {FILTRI.map(f => {

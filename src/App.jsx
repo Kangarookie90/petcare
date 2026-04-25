@@ -1154,10 +1154,10 @@ export default function App() {
               onClick={e => e.stopPropagation()}
               style={{
                 width: '100%', maxWidth: 400,
-                background: 'rgba(255,255,255,0.72)',
-                border: '1px solid rgba(255,255,255,0.9)',
+                background: 'var(--card-bg)',
+                border: '1px solid var(--card-border)',
                 borderRadius: 28, padding: '36px 32px 32px',
-                boxShadow: '0 2px 0 rgba(255,255,255,0.95) inset, 0 20px 60px rgba(0,0,0,0.18)',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
                 backdropFilter: 'blur(40px) saturate(1.8)', WebkitBackdropFilter: 'blur(40px) saturate(1.8)',
               }}
             >
