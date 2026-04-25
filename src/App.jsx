@@ -2,6 +2,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
 import { APP_VERSION, BUILD_DATE } from './version';
+import { inizializzaSync } from './syncService';
 import LoginView from './LoginView';
 import OfflineIndicator from './OfflineIndicator';
 
@@ -196,9 +197,9 @@ function HomeView() {
       const oggi = new Date();
       const inizioGiorno = new Date(oggi.setHours(0,0,0,0)).toISOString();
       const fineGiorno   = new Date(oggi.setHours(23,59,59,999)).toISOString();
-      const soglia60     = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
-      const [opRes, apRes, clRes, apTuttiRes] = await Promise.all([
+      // ── Fase 1: 3 query veloci → render immediato ─────────────
+      const [opRes, apRes, clRes] = await Promise.all([
         supabase.from("operatori").select("id,nome,cognome,colore").eq("attivo", true).order("nome"),
         supabase.from("appuntamenti").select(`
           id, inizio, fine, stato,
@@ -208,32 +209,11 @@ function HomeView() {
           appuntamenti_servizi(servizi(nome))
         `).gte("inizio", inizioGiorno).lte("inizio", fineGiorno).order("inizio"),
         supabase.from("clienti").select("id", { count: "exact", head: true }),
-        // Solo ultimi 60gg: basta per calcolare inattivi, evita di scaricare tutto lo storico
-        supabase.from("appuntamenti")
-          .select("id, inizio, clienti(id, nome, cognome, telefono), animali(nome)")
-          .gte("inizio", soglia60)
-          .order("inizio", { ascending: false })
-          .limit(1000),
       ]);
 
       const ops = opRes.data || [];
       const aps = apRes.data || [];
       const maxAp = Math.max(...ops.map(op => aps.filter(a => a.operatori?.id === op.id).length), 1);
-
-      // Calcola clienti inattivi da >60 giorni
-      const tuttiAp = apTuttiRes.data || [];
-      const ultimoPerCliente = {};
-      tuttiAp.forEach(a => {
-        const cid = a.clienti?.id;
-        if (!cid) return;
-        if (!ultimoPerCliente[cid] || new Date(a.inizio) > new Date(ultimoPerCliente[cid].inizio)) {
-          ultimoPerCliente[cid] = a;
-        }
-      });
-      const listaInattivi = Object.values(ultimoPerCliente)
-        .filter(a => new Date(a.inizio) < new Date(soglia60))
-        .sort((a, b) => new Date(a.inizio) - new Date(b.inizio));
-      setInattivi(listaInattivi);
 
       setDati({
         operatori: ops.map(op => ({
@@ -246,7 +226,30 @@ function HomeView() {
         inAttesa: aps.filter(a => a.stato === "in attesa").length,
         totaleClienti: clRes.count || 0,
       });
-      setLoading(false);
+      setLoading(false); // ← sblocca subito il render
+
+      // ── Fase 2: inattivi in background, non blocca la UI ──────
+      const soglia60 = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: apTuttiData } = await supabase
+        .from("appuntamenti")
+        .select("id, inizio, clienti(id, nome, cognome, telefono), animali(nome)")
+        .gte("inizio", soglia60)
+        .order("inizio", { ascending: false })
+        .limit(1000);
+
+      const tuttiAp = apTuttiData || [];
+      const ultimoPerCliente = {};
+      tuttiAp.forEach(a => {
+        const cid = a.clienti?.id;
+        if (!cid) return;
+        if (!ultimoPerCliente[cid] || new Date(a.inizio) > new Date(ultimoPerCliente[cid].inizio)) {
+          ultimoPerCliente[cid] = a;
+        }
+      });
+      const listaInattivi = Object.values(ultimoPerCliente)
+        .filter(a => new Date(a.inizio) < new Date(soglia60))
+        .sort((a, b) => new Date(a.inizio) - new Date(b.inizio));
+      setInattivi(listaInattivi);
     };
     load();
   }, []);
@@ -490,6 +493,11 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // ── Sync: avvia sincronizzazione DB locale al login ──────
+  useEffect(() => {
+    if (session) inizializzaSync();
+  }, [session]);
 
   // Cmd+K / Ctrl+K apre la ricerca globale
   useEffect(() => {
@@ -1154,10 +1162,10 @@ export default function App() {
               onClick={e => e.stopPropagation()}
               style={{
                 width: '100%', maxWidth: 400,
-                background: 'var(--card-bg)',
-                border: '1px solid var(--card-border)',
+                background: 'rgba(255,255,255,0.72)',
+                border: '1px solid rgba(255,255,255,0.9)',
                 borderRadius: 28, padding: '36px 32px 32px',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+                boxShadow: '0 2px 0 rgba(255,255,255,0.95) inset, 0 20px 60px rgba(0,0,0,0.18)',
                 backdropFilter: 'blur(40px) saturate(1.8)', WebkitBackdropFilter: 'blur(40px) saturate(1.8)',
               }}
             >
