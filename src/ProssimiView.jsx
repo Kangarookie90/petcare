@@ -37,6 +37,13 @@ const FILTRI = [
   { id: 'confermato',  label: 'Confermati' },
 ];
 
+const PERIODI = [
+  { id: '1m',   label: '1 mese',   mesi: 1  },
+  { id: '3m',   label: '3 mesi',   mesi: 3  },
+  { id: '6m',   label: '6 mesi',   mesi: 6  },
+  { id: 'tutti', label: 'Tutti',   mesi: null },
+];
+
 // ── Helper date ───────────────────────────────────────────────
 const fmtOra = (d) =>
   new Date(d).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -220,13 +227,17 @@ export default function ProssimiView() {
   const [operatori,    setOperatori]    = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [filtro,       setFiltro]       = useState('tutti');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const [periodo,      setPeriodo]      = useState('1m');
+  const [dropdownOpen,       setDropdownOpen]       = useState(false);
+  const [periodoDropdownOpen, setPeriodoDropdownOpen] = useState(false);
+  const dropdownRef       = useRef(null);
+  const periodoDropdownRef = useRef(null);
 
   // Chiudi dropdown al tocco/click fuori
   useEffect(() => {
     const handler = e => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false);
+      if (periodoDropdownRef.current && !periodoDropdownRef.current.contains(e.target)) setPeriodoDropdownOpen(false);
     };
     document.addEventListener('mousedown', handler);
     document.addEventListener('touchstart', handler, { passive: true });
@@ -236,33 +247,38 @@ export default function ProssimiView() {
     };
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(periodo); }, [periodo]);
 
-  const fetchData = async () => {
+  const fetchData = async (p = periodo) => {
     setLoading(true);
-    const adesso = new Date().toISOString();
+    const adesso = new Date();
+    const fineRange = PERIODI.find(x => x.id === p);
+    let fineISO = null;
+    if (fineRange?.mesi) {
+      const fine = new Date(adesso);
+      fine.setMonth(fine.getMonth() + fineRange.mesi);
+      fineISO = fine.toISOString();
+    }
+
+    let query = supabase
+      .from('appuntamenti')
+      .select(`
+        id, inizio, fine, stato, note,
+        clienti(id, nome, cognome, telefono),
+        animali(id, nome, specie, problemi_salute, problemi_carattere),
+        operatori(id, nome, cognome, colore),
+        appuntamenti_servizi(servizi(id, nome))
+      `)
+      .gte('inizio', adesso.toISOString())
+      .not('stato', 'eq', 'cancellato')
+      .order('inizio')
+      .limit(500);
+
+    if (fineISO) query = query.lte('inizio', fineISO);
 
     const [apRes, opRes] = await Promise.all([
-      supabase
-        .from('appuntamenti')
-        .select(`
-          id, inizio, fine, stato, note,
-          clienti(id, nome, cognome, telefono),
-          animali(id, nome, specie, problemi_salute, problemi_carattere),
-          operatori(id, nome, cognome, colore),
-          appuntamenti_servizi(servizi(id, nome))
-        `)
-        .gte('inizio', adesso)
-        .not('stato', 'eq', 'cancellato')
-        .order('inizio')
-        .limit(200),
-      supabase
-        .from('operatori')
-        .select('id, nome, cognome, colore')
-        .eq('attivo', true)
-        .order('nome'),
+      query,
+      supabase.from('operatori').select('id, nome, cognome, colore').eq('attivo', true).order('nome'),
     ]);
 
     setAppuntamenti(apRes.data || []);
@@ -297,11 +313,71 @@ export default function ProssimiView() {
             Prossimi
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            {loading ? 'Caricamento...' : `${apFiltrati.length} appuntament${apFiltrati.length === 1 ? 'o' : 'i'} in programma`}
+            {loading
+              ? 'Caricamento...'
+              : `${apFiltrati.length} appuntament${apFiltrati.length === 1 ? 'o' : 'i'} · ${PERIODI.find(p => p.id === periodo)?.label}`}
           </div>
         </div>
 
-        {/* Dropdown filtro */}
+        {/* Dropdown periodo */}
+        <div ref={periodoDropdownRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => { setPeriodoDropdownOpen(p => !p); setDropdownOpen(false); }}
+            style={{
+              ...glassCard,
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 14px', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
+              border: periodoDropdownOpen ? '1px solid rgba(37,99,235,0.4)' : '1px solid var(--card-border-sm)',
+              background: periodoDropdownOpen ? 'rgba(37,99,235,0.08)' : 'var(--card-bg-sm)',
+              minWidth: 110,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0 }}>
+              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+            </svg>
+            <span style={{ flex: 1 }}>{PERIODI.find(p => p.id === periodo)?.label}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, opacity: 0.5, transition: 'transform 0.2s', transform: periodoDropdownOpen ? 'rotate(180deg)' : 'none' }}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+          <AnimatePresence>
+            {periodoDropdownOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                transition={{ duration: 0.15 }}
+                style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, ...glass, padding: 6, minWidth: 150, zIndex: 50 }}
+              >
+                {PERIODI.map(p => {
+                  const sel = periodo === p.id;
+                  return (
+                    <button key={p.id} onClick={() => { setPeriodo(p.id); setPeriodoDropdownOpen(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        width: '100%', padding: '10px 12px', borderRadius: 12,
+                        background: sel ? 'rgba(37,99,235,0.1)' : 'transparent',
+                        border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: sel ? 700 : 500, color: sel ? '#2563eb' : 'var(--text-primary)' }}>
+                        {p.label}
+                      </span>
+                      {sel && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round">
+                          <path d="M20 6L9 17l-5-5"/>
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Dropdown filtro stato */}
         <div ref={dropdownRef} style={{ position: 'relative' }}>
           <button
             onClick={() => setDropdownOpen(p => !p)}
@@ -428,8 +504,8 @@ export default function ProssimiView() {
           </div>
           <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
             {filtro === 'tutti'
-              ? 'Non ci sono appuntamenti programmati'
-              : `Nessun appuntamento "${filtroLabel.toLowerCase()}" in programma`}
+              ? `Nessun appuntamento nei prossimi ${PERIODI.find(p => p.id === periodo)?.label.toLowerCase()}`
+              : `Nessun appuntamento "${filtroLabel.toLowerCase()}" nei prossimi ${PERIODI.find(p => p.id === periodo)?.label.toLowerCase()}`}
           </div>
         </motion.div>
       ) : (

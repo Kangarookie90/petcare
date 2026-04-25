@@ -1,21 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
 import { APP_VERSION, BUILD_DATE } from './version';
 import LoginView from './LoginView';
-import PetView from './PetView';
-import ClientiView from './ClientiView';
-import CalendarioView from './CalendarioView';
-import StatisticheView from './StatisticheView';
-import OperatoriView from './OperatoriView';
 import OfflineIndicator from './OfflineIndicator';
-import PrimanotaView from './PrimanotaView';
-import ProssimiView from './ProssimiView';
-import RicercaGlobale from './RicercaGlobale';
-import ProfiloView from './ProfiloView';
-import SocialView from './SocialView';
-import DashboardOperatoreView from './DashboardOperatoreView';
-import ListaAttesaView from './ListaAttesaView';
+
+// ── Code splitting: carica ogni view solo quando viene visitata ──
+const PetView                = lazy(() => import('./PetView'));
+const ClientiView            = lazy(() => import('./ClientiView'));
+const CalendarioView         = lazy(() => import('./CalendarioView'));
+const StatisticheView        = lazy(() => import('./StatisticheView'));
+const OperatoriView          = lazy(() => import('./OperatoriView'));
+const PrimanotaView          = lazy(() => import('./PrimanotaView'));
+const ProssimiView           = lazy(() => import('./ProssimiView'));
+const RicercaGlobale         = lazy(() => import('./RicercaGlobale'));
+const ProfiloView            = lazy(() => import('./ProfiloView'));
+const SocialView             = lazy(() => import('./SocialView'));
+const DashboardOperatoreView = lazy(() => import('./DashboardOperatoreView'));
+const ListaAttesaView        = lazy(() => import('./ListaAttesaView'));
 import {
   useNotifiche,
   NotificaToast,
@@ -206,7 +208,12 @@ function HomeView() {
           appuntamenti_servizi(servizi(nome))
         `).gte("inizio", inizioGiorno).lte("inizio", fineGiorno).order("inizio"),
         supabase.from("clienti").select("id", { count: "exact", head: true }),
-        supabase.from("appuntamenti").select("id, inizio, clienti(id, nome, cognome, telefono), animali(nome)").order("inizio", { ascending: false }),
+        // Solo ultimi 60gg: basta per calcolare inattivi, evita di scaricare tutto lo storico
+        supabase.from("appuntamenti")
+          .select("id, inizio, clienti(id, nome, cognome, telefono), animali(nome)")
+          .gte("inizio", soglia60)
+          .order("inizio", { ascending: false })
+          .limit(1000),
       ]);
 
       const ops = opRes.data || [];
@@ -949,7 +956,18 @@ export default function App() {
               exit="exit"
               style={{ height: "100%" }}
             >
+              <Suspense fallback={
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    border: '3px solid rgba(37,99,235,0.2)',
+                    borderTopColor: '#2563eb',
+                    animation: 'spin 0.7s linear infinite',
+                  }} />
+                </div>
+              }>
               {renderView()}
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </main>

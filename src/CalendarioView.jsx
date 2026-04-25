@@ -4,7 +4,7 @@
  * FullCalendar + Supabase
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -12,6 +12,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import itLocale from '@fullcalendar/core/locales/it';
 import { supabase } from './supabaseClient';
+import RichiamataAI from './RichiamataAI';
 
 // ── Colori operatori ─────────────────────────────────────────
 const COLORI_OP = ['#2563eb','#059669','#d97706','#7c3aed','#db2777','#0891b2'];
@@ -1129,7 +1130,14 @@ export default function CalendarioView() {
     window.innerWidth < 640 ? 'timeGridDay' : 'timeGridWeek'
   );
   const [filtroOp,     setFiltroOp]     = useState('tutti');
+  const filtroOpRef = useRef('tutti');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const setFiltroOpAndRefetch = (val) => {
+    filtroOpRef.current = val;
+    setFiltroOp(val);
+    calRef.current?.getApi().refetchEvents();
+  };
 
   // Adatta la view al cambio orientamento / resize
   useEffect(() => {
@@ -1162,13 +1170,18 @@ export default function CalendarioView() {
     };
   }, []);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchOperatori(); }, []);
 
-  const fetchAll = async () => {
-    setLoading(true);
-    const [op, ap] = await Promise.all([
-      supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome'),
-      supabase.from('appuntamenti').select(`
+  const fetchOperatori = async () => {
+    const { data } = await supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome');
+    setOperatori(data || []);
+    setLoading(false);
+  };
+
+  // Funzione eventi lazy: chiamata da FullCalendar solo per il range visibile
+  const fetchEvents = useCallback(async (fetchInfo, successCallback, failureCallback) => {
+    try {
+      const { data } = await supabase.from('appuntamenti').select(`
         id, inizio, fine, stato, note,
         prezzo_proposto, prezzo_confermato, prezzo_confermato_flag, metodo_pagamento,
         clienti(id,nome,cognome),
@@ -1176,13 +1189,26 @@ export default function CalendarioView() {
         operatori(id,nome,cognome,colore),
         appuntamenti_servizi(servizio_id, prezzo_applicato, servizi(id,nome,prezzo,durata_minuti)),
         appuntamenti_animali(animale_id, animali(id,nome,specie,problemi_carattere,problemi_salute))
-      `).neq('stato', 'cancellato'),
-    ]);
-    const ops = op.data || [];
-    setOperatori(ops);
-    setEvents(apToEvents(ap.data || [], ops));
-    setLoading(false);
-  };
+      `)
+        .neq('stato', 'cancellato')
+        .gte('inizio', fetchInfo.startStr)
+        .lte('fine',   fetchInfo.endStr);
+
+      const ops = operatori.length > 0 ? operatori : (
+        await supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome')
+      ).data || [];
+
+      if (operatori.length === 0) setOperatori(ops);
+      const evts = apToEvents(data || [], ops);
+      const filtrati = filtroOpRef.current === 'tutti'
+        ? evts
+        : evts.filter(e => e.extendedProps.operatoreId === filtroOpRef.current);
+      setEvents(filtrati);
+      successCallback(filtrati);
+    } catch (e) {
+      failureCallback(e);
+    }
+  }, [operatori]);
 
   const apToEvents = (appts, ops) => appts.map(a => {
     const op = ops.find(o => o.id === a.operatori?.id) || a.operatori;
@@ -1232,10 +1258,6 @@ export default function CalendarioView() {
   });
 
   // Filtra eventi per operatore selezionato
-  const eventsFiltrati = filtroOp === 'tutti'
-    ? events
-    : events.filter(e => e.extendedProps.operatoreId === filtroOp);
-
   const opSelezionato = operatori.find(o => o.id === filtroOp);
   const coloreOpSel   = opSelezionato?.colore || '#2563eb';
 
@@ -1259,22 +1281,21 @@ export default function CalendarioView() {
   };
 
   const handleSaved = (apData) => {
-    if (!apData) { fetchAll(); return; }
-    setOperatori(prev => {
-      const ops = prev;
-      setEvents(prevEvents => {
-        const nuovoEvent = apToEvents([apData], ops)[0];
-        if (!nuovoEvent) return prevEvents;
-        const exists = prevEvents.find(e => e.id === nuovoEvent.id);
-        return exists
-          ? prevEvents.map(e => e.id === nuovoEvent.id ? nuovoEvent : e)
-          : [...prevEvents, nuovoEvent];
-      });
-      return ops;
-    });
+    // Forza FullCalendar a ri-richiedere gli eventi per il range visibile
+    calRef.current?.getApi().refetchEvents();
+    setShowModal(false);
   };
 
-  const handleDeleted = id => setEvents(prev => prev.filter(e => e.id !== id));
+  const handleDeleted = id => {
+    calRef.current?.getApi().refetchEvents();
+  };
+
+  // ── Richiamata AI → apre modal precompilato ───────────────
+  const handleRichiamata = ({ data_ora, _precompilato }) => {
+    setSelectedAppt(_precompilato);
+    setClickedDate(data_ora ? new Date(data_ora) : new Date());
+    setShowModal(true);
+  };
 
   const changeView = v => { setView(v); calRef.current?.getApi().changeView(v); };
 
@@ -1291,7 +1312,7 @@ export default function CalendarioView() {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>Calendario</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
-            {eventsFiltrati.length}{filtroOp !== 'tutti' ? `/${events.length}` : ''} appuntamenti
+            {events.length}{filtroOp !== 'tutti' ? ` (filtrati)` : ''} appuntamenti
           </div>
         </div>
 
@@ -1356,7 +1377,7 @@ export default function CalendarioView() {
                 }}
               >
                 {/* Tutti */}
-                <button onClick={() => { setFiltroOp('tutti'); setDropdownOpen(false); }}
+                <button onClick={() => { setFiltroOpAndRefetch('tutti'); setDropdownOpen(false); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                     padding: '11px 14px', background: filtroOp === 'tutti' ? 'rgba(37,99,235,0.08)' : 'none',
                     border: 'none', borderBottom: '1px solid var(--card-border)',
@@ -1382,7 +1403,7 @@ export default function CalendarioView() {
                   const colore = op.colore || COLORI_OP[i % COLORI_OP.length];
                   const sel = filtroOp === op.id;
                   return (
-                    <button key={op.id} onClick={() => { setFiltroOp(op.id); setDropdownOpen(false); }}
+                    <button key={op.id} onClick={() => { setFiltroOpAndRefetch(op.id); setDropdownOpen(false); }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                         padding: '11px 14px', background: sel ? colore + '12' : 'none',
                         border: 'none', borderBottom: '1px solid var(--card-border)',
@@ -1456,22 +1477,19 @@ export default function CalendarioView() {
           .fc .fc-more-link { color: var(--text-accent); font-size: 11px; font-weight: 600; }
         `}</style>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>Caricamento calendario...</div>
-        ) : (
-          <FullCalendar
+        <FullCalendar
             ref={calRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView={view}
             locale={itLocale}
-            events={eventsFiltrati}
+            events={fetchEvents}
             editable={true}
             selectable={true}
             selectMirror={true}
             dayMaxEvents={3}
             slotMinTime="09:00:00"
             slotMaxTime="19:00:00"
-            slotDuration="00:10:00"
+            slotDuration="00:15:00"
             slotLabelInterval="01:00"
             allDaySlot={false}
             nowIndicator={true}
@@ -1528,7 +1546,6 @@ export default function CalendarioView() {
               );
             }}
           />
-        )}
       </motion.div>
 
       {/* Modal */}
@@ -1544,6 +1561,9 @@ export default function CalendarioView() {
           />
         )}
       </AnimatePresence>
+
+      {/* ── Richiamata AI ── */}
+      <RichiamataAI onAppuntamentoRilevato={handleRichiamata} />
     </div>
   );
 }

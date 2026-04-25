@@ -8,6 +8,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
 import PetBodyMap   from './PetBodyMap';
 
+// ── Cache URL firmati (evita richieste ripetute allo storage) ──
+const _urlCache = new Map(); // key: path → { url, exp }
+async function getSignedUrl(bucket, path, expiresIn = 3600) {
+  const now = Date.now();
+  const cached = _urlCache.get(`${bucket}:${path}`);
+  if (cached && cached.exp > now + 60_000) return cached.url; // valido per altri >60s
+  const { data } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+  if (data?.signedUrl) {
+    _urlCache.set(`${bucket}:${path}`, { url: data.signedUrl, exp: now + expiresIn * 1000 });
+    return data.signedUrl;
+  }
+  return null;
+}
+
 // ── Stili condivisi ───────────────────────────────────────────
 const glass = {
   background:  'var(--card-bg)',
@@ -517,10 +531,15 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const [savingEdit,    setSavingEdit]    = useState(false);
   const [editError,     setEditError]     = useState('');
 
-  // Carica razze per il modal di modifica
+  // Carica razze e servizi in parallelo al mount
   useEffect(() => {
-    supabase.from('razze').select('id,nome,specie').order('nome')
-      .then(({ data }) => setEditFormRazze(data || []));
+    Promise.all([
+      supabase.from('razze').select('id,nome,specie').order('nome'),
+      supabase.from('servizi').select('id,nome,durata_minuti').order('nome'),
+    ]).then(([razzeRes, serviziRes]) => {
+      setEditFormRazze(razzeRes.data || []);
+      setServizi(serviziRes.data || []);
+    });
   }, []);
 
   const saveEditForm = async () => {
@@ -623,8 +642,8 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
         const urls = await Promise.all(
           data.filter(f => f.name !== '.emptyFolderPlaceholder').map(async f => {
             const path = `${animale.id}/${f.name}`;
-            const { data: su } = await supabase.storage.from('animali-memo').createSignedUrl(path, 3600);
-            return { name: f.name, url: su?.signedUrl, created_at: f.created_at, path };
+            const url = await getSignedUrl('animali-memo', path);
+            return { name: f.name, url, created_at: f.created_at, path };
           })
         );
         setMemoVocali(urls.filter(u => u.url).sort((a,b) => b.name.localeCompare(a.name)));
@@ -670,8 +689,8 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
       const urls = await Promise.all(
         data.filter(f => f.name !== '.emptyFolderPlaceholder').map(async f => {
           const p = `${animale.id}/${f.name}`;
-          const { data: su } = await supabase.storage.from('animali-memo').createSignedUrl(p, 3600);
-          return { name: f.name, url: su?.signedUrl, created_at: f.created_at, path: p };
+          const url = await getSignedUrl('animali-memo', p);
+          return { name: f.name, url, created_at: f.created_at, path: p };
         })
       );
       setMemoVocali(urls.filter(u => u.url).sort((a,b) => b.name.localeCompare(a.name)));
@@ -739,11 +758,6 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const [nuovoVacc,  setNuovoVacc]  = useState({ nome:'', data_ultima:'', scadenza:'' });
   const [savingSan,  setSavingSan]  = useState(false);
 
-  useEffect(() => {
-    supabase.from('servizi').select('id,nome,durata_minuti').order('nome')
-      .then(({ data }) => setServizi(data || []));
-  }, []);
-
   // Carica visite quando si apre il tab
   useEffect(() => {
     if (tab !== 'visite') return;
@@ -774,11 +788,10 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
 
   const removeVaccino = (i) => setVaccini(v => v.filter((_,idx) => idx !== i));
 
-  // Carica signed URL per la foto
+  // Carica signed URL per la foto (con cache)
   useEffect(() => {
     if (!animale.foto_url) return;
-    supabase.storage.from('animali-foto').createSignedUrl(animale.foto_url, 3600)
-      .then(({ data }) => { if (data?.signedUrl) setFotoUrl(data.signedUrl); });
+    getSignedUrl('animali-foto', animale.foto_url).then(url => { if (url) setFotoUrl(url); });
   }, [animale.foto_url]);
 
   // Comprimi immagine con Canvas (max 800x800, JPEG 80%)
@@ -818,9 +831,9 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
       }
       await supabase.from('animali').update({ foto_url: path }).eq('id', animale.id);
       onUpdate({ ...animale, foto_url: path });
-      // Genera signed url per preview immediata
-      const { data } = await supabase.storage.from('animali-foto').createSignedUrl(path, 3600);
-      if (data?.signedUrl) setFotoUrl(data.signedUrl);
+      // Genera signed url per preview immediata (e popola la cache)
+      const url = await getSignedUrl('animali-foto', path);
+      if (url) setFotoUrl(url);
     } catch (err) {
       setFotoError('Errore upload: ' + (err.message || 'riprova'));
     } finally {

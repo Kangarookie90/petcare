@@ -23,13 +23,13 @@ const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appunta
 
 // ── Select per tabelle con join o campi specifici ────────────
 // animali:               include campi sanitari + nuovi campi comportamento e note vocali
-// appuntamenti:          include note, reminder, prezzo, metodo_pagamento
+// appuntamenti:          include note, prezzi, metodo_pagamento + join con id su clienti/animali e campi problemi
 // appuntamenti_animali:  junction table multi-animale — include dati animale per uso offline
 // notifiche:             sola lettura — inserite dal webhook WhatsApp server-side
 // lista_attesa:          include join a clienti, animali, operatori
 const SELECT_MAP = {
   animali:              '*, razze(id, nome), clienti(id, nome, cognome)',
-  appuntamenti:         '*, clienti(nome, cognome), animali(nome, specie), operatori(id, nome, cognome, colore)',
+  appuntamenti:         '*, clienti(id, nome, cognome), animali(id, nome, specie, problemi_carattere, problemi_salute), operatori(id, nome, cognome, colore)',
   appuntamenti_animali: 'id, appuntamento_id, animale_id, animali(id, nome, specie, problemi_carattere, problemi_salute)',
   notifiche:            'id, tipo, appuntamento_id, messaggio, telefono_cliente, letto, created_at',
   lista_attesa:         '*, clienti(id, nome, cognome, telefono), animali(id, nome, specie), operatori(id, nome, colore)',
