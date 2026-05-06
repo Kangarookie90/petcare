@@ -184,3 +184,26 @@ input[type="time"] {
     padding: 4px 7px !important;
   }
 }
+/* ── Rimuove il rettangolo di selezione nativo Android Chrome ── */
+*,
+*::before,
+*::after {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+button,
+a,
+[role="button"],
+input[type="button"],
+input[type="submit"] {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mantieni outline per navigazione da tastiera (accessibilità) */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--text-accent);
+  outline-offset: 2px;
+}
