@@ -283,7 +283,6 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
 
   const save = async () => {
     if (!f.nome.trim()) { setError('Inserisci il nome'); return; }
-    if (!f.cognome.trim()) { setError('Inserisci il cognome'); return; }
     setLoading(true); setError('');
 
     // 1. Salva il cliente
@@ -331,7 +330,7 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
             onChange={e => set('nome', e.target.value)} style={inputStyle} autoFocus />
         </div>
         <div>
-          <div style={secLabel}>Cognome *</div>
+          <div style={secLabel}>Cognome</div>
           <input type="text" placeholder="Rossi" value={f.cognome}
             onChange={e => set('cognome', e.target.value)} style={inputStyle} />
         </div>
@@ -476,8 +475,8 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack, onNavigate
   };
 
   const saveEditForm = async () => {
-    if (!editForm.nome.trim() || !editForm.cognome.trim()) {
-      setEditError('Nome e cognome sono obbligatori'); return;
+    if (!editForm.nome.trim()) {
+      setEditError('Il nome è obbligatorio'); return;
     }
     setSavingEdit(true); setEditError('');
     const updates = {
@@ -737,7 +736,7 @@ function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack, onNavigate
               <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
-                    <div style={secLabel}>Cognome *</div>
+                    <div style={secLabel}>Cognome</div>
                     <input type="text" value={editForm.cognome}
                       onChange={e => setEditForm(p => ({ ...p, cognome: e.target.value }))}
                       style={inputStyle} placeholder="Cognome" />
