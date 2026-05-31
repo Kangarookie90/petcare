@@ -5,6 +5,7 @@ import { APP_VERSION, BUILD_DATE } from './version';
 import { inizializzaSync } from './syncService';
 import LoginView from './LoginView';
 import OfflineIndicator from './OfflineIndicator';
+import BriefingMattutino from './BriefingMattutino';
 
 // ── Code splitting: carica ogni view solo quando viene visitata ──
 const PetView                = lazy(() => import('./PetView'));
@@ -270,6 +271,15 @@ function HomeView() {
         <h1 style={{ fontSize: 30, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.6px" }}>
           {saluto}!
         </h1>
+      </motion.div>
+
+      {/* Briefing mattutino AI */}
+      <motion.div variants={itemVariants}>
+        <BriefingMattutino
+          appuntamenti={dati.appuntamenti}
+          inattivi={inattivi}
+          loading={loading}
+        />
       </motion.div>
 
       {/* KPI cards */}
