@@ -534,12 +534,6 @@ export default function StatisticheView() {
   const [apConf,       setApConf]       = useState([]);
   const [opSelezionato, setOpSelezionato] = useState(null); // drill-down operatore
 
-  // ── Backup / Ripristino ──────────────────────────────────────
-  const [backupLoading,  setBackupLoading]  = useState(false);
-  const [ripristinoStep, setRipristinoStep] = useState('idle'); // idle|confirm|uploading|done|error
-  const [ripristinoMsg,  setRipristinoMsg]  = useState('');
-  const [templateLoading,setTemplateLoading]= useState(false);
-
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
@@ -573,9 +567,10 @@ export default function StatisticheView() {
     setLoading(false);
   };
 
-  // ── Backup completo → Excel ───────────────────────────────
-  const scaricaBackup = async () => {
-    setBackupLoading(true);
+  // ── Dati calcolati ────────────────────────────────────────
+  const apMese = appuntamenti.filter(a => {
+    const d = new Date(a.inizio);
+    return d.getMonth() === meseSel && d.getFullYear() === annoSel;
     try {
       const [cl, an, op, sv, rz, ap, aps, pn, no] = await Promise.all([
         supabase.from('clienti').select('*'),
@@ -615,60 +610,6 @@ export default function StatisticheView() {
       console.error('Backup fallito:', e);
     }
     setBackupLoading(false);
-  };
-
-  // ── Template vuoto per ripristino ────────────────────────
-  const scaricaTemplate = () => {
-    setTemplateLoading(true);
-    const wb = XLSX.utils.book_new();
-    const struttura = {
-      clienti:              ['id','nome','cognome','telefono','email','indirizzo','note','created_at'],
-      animali:              ['id','cliente_id','nome','specie','razza_id','colore','data_nascita','zone_critiche','note','operatore_preferito_id','created_at'],
-      operatori:            ['id','nome','cognome','colore','attivo'],
-      servizi:              ['id','nome','prezzo','durata_minuti'],
-      razze:                ['id','nome','specie'],
-      appuntamenti:         ['id','cliente_id','animale_id','operatore_id','inizio','fine','stato','note','prezzo_proposto','prezzo_confermato','prezzo_confermato_flag','metodo_pagamento','reminder_inviato','reminder_giorni_prima'],
-      appuntamenti_servizi: ['id','appuntamento_id','servizio_id','prezzo_applicato'],
-      primanota:            ['id','data','tipo','importo','descrizione','operatore_id','appuntamento_id'],
-      notifiche:            ['id','tipo','appuntamento_id','messaggio','telefono_cliente','letto','created_at'],
-    };
-    Object.entries(struttura).forEach(([nome, colonne]) => {
-      const ws = XLSX.utils.aoa_to_sheet([colonne]);
-      XLSX.utils.book_append_sheet(wb, ws, nome);
-    });
-    XLSX.writeFile(wb, 'nemora_template_ripristino.xlsx');
-    setTemplateLoading(false);
-  };
-
-  // ── Ripristino da Excel ───────────────────────────────────
-  const gestisciRipristino = async (file) => {
-    if (!file) return;
-    setRipristinoStep('uploading');
-    setRipristinoMsg('Lettura file in corso...');
-    try {
-      const buf = await file.arrayBuffer();
-      const wb  = XLSX.read(buf, { type: 'array' });
-      const tabelle = ['clienti','animali','operatori','servizi','razze','appuntamenti','appuntamenti_servizi','primanota'];
-      let totRighe = 0;
-
-      for (const nome of tabelle) {
-        if (!wb.SheetNames.includes(nome)) continue;
-        const ws   = wb.Sheets[nome];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-        if (rows.length === 0) continue;
-        setRipristinoMsg(`Ripristino ${nome} (${rows.length} righe)...`);
-        const { error } = await supabase.from(nome).upsert(rows, { onConflict: 'id' });
-        if (error) throw new Error(`Errore su ${nome}: ${error.message}`);
-        totRighe += rows.length;
-      }
-
-      setRipristinoStep('done');
-      setRipristinoMsg(`Ripristino completato — ${totRighe} record importati.`);
-      fetchAll();
-    } catch (e) {
-      setRipristinoStep('error');
-      setRipristinoMsg(e.message || 'Errore durante il ripristino.');
-    }
   };
 
   // ── Dati calcolati ────────────────────────────────────────
@@ -1440,93 +1381,248 @@ export default function StatisticheView() {
         </div>
       </motion.div>
 
-      {/* ── Backup & Ripristino ── */}
+      {/* ── Previsioni & Trend ── */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ marginTop: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 14 }}>
-          Backup & Ripristino
+          Previsioni &amp; Trend
         </div>
 
-        {/* Backup */}
-        <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 18, padding: '18px 20px', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 13, background: 'rgba(5,150,105,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Scarica backup</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Tutte le tabelle in un file Excel. Salva in un posto sicuro.</div>
-            </div>
-            <button onClick={scaricaBackup} disabled={backupLoading}
-              style={{ padding: '9px 18px', borderRadius: 12, border: 'none', background: '#059669', color: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', opacity: backupLoading ? 0.6 : 1, flexShrink: 0 }}>
-              {backupLoading ? '...' : 'Scarica'}
-            </button>
-          </div>
-        </div>
+        {(() => {
+          // ── Calcoli per le previsioni ────────────────────────────
+          const oggi = new Date();
+          const meseCorrente = oggi.getMonth();
+          const annoCorrente = oggi.getFullYear();
+          const giornoDelMese = oggi.getDate();
+          const giorniNelMese = new Date(annoCorrente, meseCorrente + 1, 0).getDate();
+          const frازioneMese = giornoDelMese / giorniNelMese;
 
-        {/* Ripristino */}
-        <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 18, padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 13, background: 'rgba(217,119,6,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Ripristino dati</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Importa un file Excel. I dati esistenti vengono aggiornati (upsert).</div>
-            </div>
-          </div>
+          // Solo se siamo nel mese selezionato — altrimenti usa dati storici puri
+          const èMeseCorrente = meseSel === meseCorrente && annoSel === annoCorrente;
 
-          {/* Bottone template */}
-          <button onClick={scaricaTemplate} disabled={templateLoading}
-            style={{ width: '100%', padding: '10px', borderRadius: 12, border: '1px solid var(--card-border)', background: 'var(--card-bg-sm)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-            {templateLoading ? 'Download...' : 'Scarica template vuoto'}
-          </button>
+          // Appuntamenti completati questo mese finora
+          const apCompletatiMese = apMese.filter(a => a.stato === 'completato');
+          const ricavoFinora = apCompletatiMese.reduce((acc, a) => acc + getPrezzoAp(a), 0);
 
-          {/* Upload file */}
-          {ripristinoStep === 'idle' && (
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '10px', borderRadius: 12, border: '2px dashed var(--card-border)', background: 'transparent', color: '#d97706', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              </svg>
-              Carica file Excel (.xlsx)
-              <input type="file" accept=".xlsx" style={{ display: 'none' }}
-                onChange={e => { if (e.target.files[0]) gestisciRipristino(e.target.files[0]); }} />
-            </label>
-          )}
+          // Proiezione fine mese (solo se nel mese corrente e almeno 3 giorni di dati)
+          const ricavoProiettato = èMeseCorrente && giornoDelMese >= 3 && frازioneMese > 0
+            ? Math.round(ricavoFinora / frازioneMese)
+            : null;
 
-          {/* Stato ripristino */}
-          {ripristinoStep === 'uploading' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.2)' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
-                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3"/><path d="M21 12a9 9 0 00-9-9"/>
-              </svg>
-              <span style={{ fontSize: 13, color: '#d97706', fontWeight: 500 }}>{ripristinoMsg}</span>
+          // Appuntamenti futuri prenotati nel mese corrente (già in agenda)
+          const apFuturi = appuntamenti.filter(a => {
+            const d = new Date(a.inizio);
+            return d.getMonth() === meseSel && d.getFullYear() === annoSel
+              && d > oggi && a.stato !== 'cancellato';
+          });
+          const ricavoAtteso = apFuturi.reduce((acc, a) => acc + getPrezzoAp(a), 0);
+          const ricavoTotaleAtteso = Math.round(ricavoFinora + ricavoAtteso);
+
+          // Trend mese su mese (confronto con stesso mese anno precedente)
+          const apMesePrecedente = appuntamenti.filter(a => {
+            const d = new Date(a.inizio);
+            const mp = meseSel === 0 ? 11 : meseSel - 1;
+            const yp = meseSel === 0 ? annoSel - 1 : annoSel;
+            return d.getMonth() === mp && d.getFullYear() === yp && a.stato === 'completato';
+          });
+          const ricavoMesePrecedente = apMesePrecedente.reduce((acc, a) => acc + getPrezzoAp(a), 0);
+          const deltaMoM = ricavoMesePrecedente > 0
+            ? Math.round(((ricavoFinora - ricavoMesePrecedente) / ricavoMesePrecedente) * 100)
+            : null;
+
+          // Clienti inattivi (>60gg senza appuntamenti completati)
+          const soglia60 = new Date(oggi.getTime() - 60 * 24 * 60 * 60 * 1000);
+          const ultimiApPerCliente = {};
+          appuntamenti
+            .filter(a => a.stato === 'completato' && a.clienti?.id)
+            .forEach(a => {
+              const cid = a.clienti.id;
+              const d = new Date(a.inizio);
+              if (!ultimiApPerCliente[cid] || d > ultimiApPerCliente[cid].data) {
+                ultimiApPerCliente[cid] = { data: d, nome: `${a.clienti.cognome} ${a.clienti.nome}` };
+              }
+            });
+          const inativiConNome = Object.values(ultimiApPerCliente)
+            .filter(c => c.data < soglia60)
+            .sort((a, b) => a.data - b.data)
+            .slice(0, 5);
+          const totInattivi = Object.values(ultimiApPerCliente).filter(c => c.data < soglia60).length;
+
+          // Servizio con crescita più rapida (ultimi 3 mesi vs 3 mesi precedenti)
+          const contaServizioPeriodo = (mesiIndietroStart, mesiIndietroEnd) => {
+            const start = new Date(oggi); start.setMonth(start.getMonth() - mesiIndietroStart);
+            const end   = new Date(oggi); end.setMonth(end.getMonth() - mesiIndietroEnd);
+            const counts = {};
+            appuntamenti
+              .filter(a => { const d = new Date(a.inizio); return d >= start && d < end && a.stato === 'completato'; })
+              .forEach(a => {
+                (a.appuntamenti_servizi || []).forEach(r => {
+                  const nome = r.servizi?.nome;
+                  if (nome) counts[nome] = (counts[nome] || 0) + 1;
+                });
+              });
+            return counts;
+          };
+          const recenti   = contaServizioPeriodo(3, 0);
+          const precedenti = contaServizioPeriodo(6, 3);
+          let servizioCrescita = null;
+          let maxCrescita = 0;
+          Object.entries(recenti).forEach(([nome, count]) => {
+            const prec = precedenti[nome] || 0;
+            if (prec > 0) {
+              const delta = ((count - prec) / prec) * 100;
+              if (delta > maxCrescita) { maxCrescita = delta; servizioCrescita = { nome, delta: Math.round(delta), count }; }
+            } else if (count >= 2) {
+              // Servizio nuovo con almeno 2 utilizzi
+              if (count > maxCrescita) { maxCrescita = count; servizioCrescita = { nome, delta: null, count }; }
+            }
+          });
+
+          // Giorno della settimana più trafficato (ultimi 3 mesi)
+          const start3m = new Date(oggi); start3m.setMonth(start3m.getMonth() - 3);
+          const conteggioGiorni = [0,0,0,0,0,0,0];
+          appuntamenti
+            .filter(a => new Date(a.inizio) >= start3m && a.stato !== 'cancellato')
+            .forEach(a => { conteggioGiorni[new Date(a.inizio).getDay()]++; });
+          const nomiGiorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+          const giornoTop = conteggioGiorni.indexOf(Math.max(...conteggioGiorni));
+
+          // Tasso cancellazioni mese
+          const tassoCancellazioni = apMese.length > 0
+            ? Math.round((apMese.filter(a => a.stato === 'cancellato').length / apMese.length) * 100)
+            : 0;
+
+          // Card stile KPI
+          const CardPrevisione = ({ titolo, valore, sotto, colore, icona, highlight }) => (
+            <div style={{
+              background: highlight ? `linear-gradient(135deg, ${colore}18, ${colore}08)` : 'var(--card-bg)',
+              border: `1px solid ${highlight ? colore + '35' : 'var(--card-border)'}`,
+              borderRadius: 18, padding: '16px 18px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.4px', textTransform: 'uppercase', marginBottom: 6 }}>{titolo}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: highlight ? colore : 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1 }}>{valore}</div>
+                  {sotto && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 5, lineHeight: 1.45 }}>{sotto}</div>}
+                </div>
+                <div style={{ width: 36, height: 36, borderRadius: 11, background: colore + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {icona}
+                </div>
+              </div>
             </div>
-          )}
-          {ripristinoStep === 'done' && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.2)' }}>
-              <span style={{ fontSize: 13, color: '#059669', fontWeight: 500 }}>{ripristinoMsg}</span>
-              <button onClick={() => setRipristinoStep('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#059669', fontFamily: 'inherit', fontWeight: 600 }}>Nuovo</button>
+          );
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* Riga 1: proiezione + atteso */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <CardPrevisione
+                  titolo="Proiezione fine mese"
+                  valore={ricavoProiettato != null ? `€ ${ricavoProiettato.toLocaleString('it-IT')}` : '—'}
+                  sotto={ricavoProiettato != null
+                    ? `Basata su ${giornoDelMese} gg su ${giorniNelMese} (${Math.round(frازioneMese * 100)}% del mese)`
+                    : 'Disponibile solo per il mese corrente'}
+                  colore="#2060dd"
+                  highlight={ricavoProiettato != null}
+                  icona={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2060dd" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>}
+                />
+                <CardPrevisione
+                  titolo="Totale atteso mese"
+                  valore={`€ ${ricavoTotaleAtteso.toLocaleString('it-IT')}`}
+                  sotto={`€ ${Math.round(ricavoFinora).toLocaleString('it-IT')} incassati + € ${Math.round(ricavoAtteso).toLocaleString('it-IT')} in agenda`}
+                  colore="#059669"
+                  highlight={ricavoAtteso > 0}
+                  icona={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>}
+                />
+              </div>
+
+              {/* Riga 2: trend MoM + cancellazioni */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <CardPrevisione
+                  titolo="Trend vs mese prec."
+                  valore={deltaMoM != null ? `${deltaMoM > 0 ? '+' : ''}${deltaMoM}%` : '—'}
+                  sotto={deltaMoM != null
+                    ? `${deltaMoM >= 0 ? '↑ In crescita' : '↓ In calo'} rispetto a ${MESI_SHORT[meseSel === 0 ? 11 : meseSel - 1]}`
+                    : 'Dati mese precedente insufficienti'}
+                  colore={deltaMoM != null && deltaMoM >= 0 ? '#059669' : '#e85c3a'}
+                  highlight={deltaMoM != null}
+                  icona={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={deltaMoM != null && deltaMoM >= 0 ? '#059669' : '#e85c3a'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>}
+                />
+                <CardPrevisione
+                  titolo="Tasso cancellazioni"
+                  valore={`${tassoCancellazioni}%`}
+                  sotto={`${apMese.filter(a => a.stato === 'cancellato').length} canc. su ${apMese.length} ap. ${tassoCancellazioni > 15 ? '⚠️ Alto' : tassoCancellazioni > 8 ? '— Nella norma' : '✓ Ottimo'}`}
+                  colore={tassoCancellazioni > 15 ? '#e85c3a' : tassoCancellazioni > 8 ? '#d97706' : '#059669'}
+                  highlight={tassoCancellazioni > 15}
+                  icona={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={tassoCancellazioni > 15 ? '#e85c3a' : '#d97706'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>}
+                />
+              </div>
+
+              {/* Giorno top + servizio in crescita */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <CardPrevisione
+                  titolo="Giorno più trafficato"
+                  valore={nomiGiorni[giornoTop]}
+                  sotto={`${conteggioGiorni[giornoTop]} ap. negli ultimi 3 mesi — pianifica le risorse`}
+                  colore="#a855f7"
+                  highlight
+                  icona={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
+                />
+                <CardPrevisione
+                  titolo="Servizio in crescita"
+                  valore={servizioCrescita ? servizioCrescita.nome : '—'}
+                  sotto={servizioCrescita
+                    ? servizioCrescita.delta != null
+                      ? `+${servizioCrescita.delta}% vs trimestre prec. (${servizioCrescita.count} utilizzi)`
+                      : `Nuovo — ${servizioCrescita.count} utilizzi negli ultimi 3 mesi`
+                    : 'Dati insufficienti'}
+                  colore="#f97316"
+                  highlight={servizioCrescita != null}
+                  icona={<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>}
+                />
+              </div>
+
+              {/* Clienti inattivi */}
+              {totInattivi > 0 && (
+                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 18, padding: '16px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.4px', textTransform: 'uppercase', marginBottom: 3 }}>Clienti da richiamare</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        <span style={{ fontWeight: 700, color: '#d97706' }}>{totInattivi}</span> clienti assenti da più di 60 giorni
+                      </div>
+                    </div>
+                    <div style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(217,119,6,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.72A2 2 0 012 .93h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {inativiConNome.map((c, i) => {
+                      const giorni = Math.floor((oggi - c.data) / (1000 * 60 * 60 * 24));
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--card-bg-sm)', borderRadius: 12, border: '1px solid var(--card-border-sm)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{c.nome}</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: giorni > 90 ? '#dc2626' : '#d97706', background: giorni > 90 ? 'rgba(220,38,38,0.08)' : 'rgba(217,119,6,0.08)', padding: '3px 8px', borderRadius: 8 }}>
+                            {giorni} gg fa
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {totInattivi > 5 && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', paddingTop: 4 }}>
+                        + altri {totInattivi - 5} clienti inattivi
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
             </div>
-          )}
-          {ripristinoStep === 'error' && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)' }}>
-              <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>{ripristinoMsg}</span>
-              <button onClick={() => setRipristinoStep('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#dc2626', fontFamily: 'inherit', fontWeight: 600 }}>Riprova</button>
-            </div>
-          )}
-        </div>
+          );
+        })()}
+
       </motion.div>
 
     </div>
