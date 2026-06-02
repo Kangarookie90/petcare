@@ -571,51 +571,6 @@ export default function StatisticheView() {
   const apMese = appuntamenti.filter(a => {
     const d = new Date(a.inizio);
     return d.getMonth() === meseSel && d.getFullYear() === annoSel;
-    try {
-      const [cl, an, op, sv, rz, ap, aps, pn, no] = await Promise.all([
-        supabase.from('clienti').select('*'),
-        supabase.from('animali').select('*'),
-        supabase.from('operatori').select('*'),
-        supabase.from('servizi').select('*'),
-        supabase.from('razze').select('*'),
-        supabase.from('appuntamenti').select('*'),
-        supabase.from('appuntamenti_servizi').select('*'),
-        supabase.from('primanota').select('*'),
-        supabase.from('notifiche').select('*'),
-      ]);
-
-      const wb = XLSX.utils.book_new();
-      const tabelle = [
-        { nome: 'clienti',              data: cl.data  || [] },
-        { nome: 'animali',              data: an.data  || [] },
-        { nome: 'operatori',            data: op.data  || [] },
-        { nome: 'servizi',              data: sv.data  || [] },
-        { nome: 'razze',                data: rz.data  || [] },
-        { nome: 'appuntamenti',         data: ap.data  || [] },
-        { nome: 'appuntamenti_servizi', data: aps.data || [] },
-        { nome: 'primanota',            data: pn.data  || [] },
-        { nome: 'notifiche',            data: no.data  || [] },
-      ];
-
-      tabelle.forEach(({ nome, data }) => {
-        const ws = data.length > 0
-          ? XLSX.utils.json_to_sheet(data)
-          : XLSX.utils.json_to_sheet([{}]);
-        XLSX.utils.book_append_sheet(wb, ws, nome);
-      });
-
-      const data = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, `nemora_backup_${data}.xlsx`);
-    } catch (e) {
-      console.error('Backup fallito:', e);
-    }
-    setBackupLoading(false);
-  };
-
-  // ── Dati calcolati ────────────────────────────────────────
-  const apMese = appuntamenti.filter(a => {
-    const d = new Date(a.inizio);
-    return d.getMonth() === meseSel && d.getFullYear() === annoSel;
   });
 
   const oggi = new Date();
