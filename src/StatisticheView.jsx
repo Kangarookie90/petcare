@@ -578,10 +578,7 @@ export default function StatisticheView({ role, session }) {
   const apMeseVis = !isAdmin && opCorrente
     ? apMese.filter(a => a.operatori?.id === opCorrente.id)
     : apMese;
-    const d = new Date(a.inizio);
-    return d.getMonth() === meseSel && d.getFullYear() === annoSel;
-  });
-
+    
   const oggi = new Date();
   const apOggi = appuntamenti.filter(a =>
     new Date(a.inizio).toDateString() === oggi.toDateString()
