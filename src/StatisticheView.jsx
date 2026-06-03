@@ -509,7 +509,7 @@ function exportCSV(appuntamenti, meseLabel) {
 // ─────────────────────────────────────────────────────────────
 // COMPONENTE PRINCIPALE
 // ─────────────────────────────────────────────────────────────
-export default function StatisticheView() {
+export default function StatisticheView({ role, session }) {
   const [loading,         setLoading]         = useState(true);
   const [exporting,       setExporting]       = useState('');
   const [showExportPanel, setShowExportPanel] = useState(false);
@@ -567,8 +567,17 @@ export default function StatisticheView() {
     setLoading(false);
   };
 
-  // ── Dati calcolati ────────────────────────────────────────
-  const apMese = appuntamenti.filter(a => {
+  // ── Filtraggio per ruolo ─────────────────────────────────────
+  // opCorrente: il record operatori che corrisponde all'utente loggato (match per email)
+  const isAdmin    = role === 'admin';
+  const opCorrente = !isAdmin
+    ? operatori.find(op => op.email === session?.user?.email) ?? null
+    : null;
+
+  // apMeseVis: per l'operatore mostra solo i propri appuntamenti del mese
+  const apMeseVis = !isAdmin && opCorrente
+    ? apMese.filter(a => a.operatori?.id === opCorrente.id)
+    : apMese;
     const d = new Date(a.inizio);
     return d.getMonth() === meseSel && d.getFullYear() === annoSel;
   });
@@ -578,11 +587,11 @@ export default function StatisticheView() {
     new Date(a.inizio).toDateString() === oggi.toDateString()
   ).length;
 
-  const completati  = apMese.filter(a => a.stato === 'completato').length;
-  const cancellati  = apMese.filter(a => a.stato === 'cancellato').length;
-  const inAttesa    = apMese.filter(a => a.stato === 'in attesa').length;
-  const confermati  = apMese.filter(a => a.stato === 'confermato').length;
-  const tassoCompletamento = apMese.length > 0 ? Math.round((completati / apMese.length) * 100) : 0;
+  const completati  = apMeseVis.filter(a => a.stato === 'completato').length;
+  const cancellati  = apMeseVis.filter(a => a.stato === 'cancellato').length;
+  const inAttesa    = apMeseVis.filter(a => a.stato === 'in attesa').length;
+  const confermati  = apMeseVis.filter(a => a.stato === 'confermato').length;
+  const tassoCompletamento = apMeseVis.length > 0 ? Math.round((completati / apMeseVis.length) * 100) : 0;
 
   // Usa prezzo_confermato se disponibile, altrimenti prezzo_proposto, altrimenti somma dei servizi
   const getPrezzoAp = (a) => {
@@ -597,11 +606,11 @@ export default function StatisticheView() {
   // Helper: lista servizi di un appuntamento
   const getServiziAp = (a) => (a.appuntamenti_servizi || []).map(r => r.servizi).filter(Boolean);
 
-  const ricavoMese = apMese
+  const ricavoMese = apMeseVis
     .filter(a => a.stato === 'completato')
     .reduce((acc, a) => acc + getPrezzoAp(a), 0);
 
-  const ricavoConfermato = apMese
+  const ricavoConfermato = apMeseVis
     .filter(a => a.prezzo_confermato_flag)
     .reduce((acc, a) => acc + Number(a.prezzo_confermato), 0);
 
@@ -610,15 +619,18 @@ export default function StatisticheView() {
     return d.getMonth() === meseSel && d.getFullYear() === annoSel;
   }).length;
 
-  // Trend 6 mesi
+  // Trend 6 mesi — per l'operatore filtrato sui propri appuntamenti
   const trend6 = Array.from({ length: 6 }, (_, i) => {
     let m = meseSel - 5 + i;
     let y = annoSel;
     if (m < 0) { m += 12; y -= 1; }
-    const ap = appuntamenti.filter(a => {
+    const apTutti = appuntamenti.filter(a => {
       const d = new Date(a.inizio);
       return d.getMonth() === m && d.getFullYear() === y;
     });
+    const ap = !isAdmin && opCorrente
+      ? apTutti.filter(a => a.operatori?.id === opCorrente.id)
+      : apTutti;
     const ricavo = ap.filter(a => a.stato === 'completato')
       .reduce((acc, a) => acc + getPrezzoAp(a), 0);
     return {
@@ -629,23 +641,23 @@ export default function StatisticheView() {
     };
   });
 
-  // Per operatore
+  // Per operatore — l'operatore vede solo sé stesso, già selezionato
   const perOperatore = operatori.map((op, i) => {
     const apOp = apMese.filter(a => a.operatori?.id === op.id);
     return {
-      nome: op.nome,
-      totale: apOp.length,
+      id:         op.id,
+      nome:       op.nome,
+      totale:     apOp.length,
       completati: apOp.filter(a => a.stato === 'completato').length,
-      colore: op.colore || COLORI[i % COLORI.length],
+      colore:     op.colore || COLORI[i % COLORI.length],
     };
   }).filter(o => o.totale > 0).sort((a,b) => b.totale - a.totale);
 
   const maxOpTotale = Math.max(...perOperatore.map(o => o.totale), 1);
 
-  // Per servizio
+  // Per servizio — filtrato su apMeseVis
   const perServizio = servizi.map(s => {
-    // Conta appuntamenti del mese che contengono questo servizio
-    const apSv = apMese.filter(a =>
+    const apSv = apMeseVis.filter(a =>
       (a.appuntamenti_servizi || []).some(r => r.servizio_id === s.id)
     );
     // Ricavo: somma prezzo_applicato di questo servizio specifico
@@ -1127,6 +1139,7 @@ export default function StatisticheView() {
       </motion.div>
 
       {/* ── OPERATORI ── */}
+      {/* ── CARICO PER OPERATORE ── */}
       {perOperatore.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -1134,44 +1147,52 @@ export default function StatisticheView() {
           transition={{ delay: 0.2 }}
           style={{ ...glass, padding: '22px 24px', marginBottom: 14 }}
         >
-          <div style={secLabel}>Carico per operatore — {meseLabel}</div>
-          <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Rings operatori — cliccabili */}
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              {perOperatore.map(op => (
-                <div key={op.nome} onClick={() => setOpSelezionato(opSelezionato?.nome === op.nome ? null : op)}
-                  style={{ cursor: 'pointer', opacity: opSelezionato && opSelezionato.nome !== op.nome ? 0.4 : 1, transition: 'opacity 0.2s' }}>
-                  <DonutRing
+          <div style={secLabel}>
+            {isAdmin ? `Carico per operatore — ${meseLabel}` : `Le mie statistiche — ${meseLabel}`}
+          </div>
+
+          {/* Rings e barre — solo per admin */}
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                {perOperatore.map(op => (
+                  <div key={op.nome} onClick={() => setOpSelezionato(opSelezionato?.nome === op.nome ? null : op)}
+                    style={{ cursor: 'pointer', opacity: opSelezionato && opSelezionato.nome !== op.nome ? 0.4 : 1, transition: 'opacity 0.2s' }}>
+                    <DonutRing
+                      value={op.totale}
+                      max={maxOpTotale}
+                      color={op.colore}
+                      size={100}
+                      strokeWidth={11}
+                      label={op.nome}
+                      sublabel={`${op.completati} ok`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                {perOperatore.map(op => (
+                  <BarraOrizzontale
+                    key={op.nome}
+                    label={op.nome}
                     value={op.totale}
                     max={maxOpTotale}
                     color={op.colore}
-                    size={100}
-                    strokeWidth={11}
-                    label={op.nome}
-                    sublabel={`${op.completati} ok`}
+                    extra={`/ ${op.completati} completati`}
                   />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-            {/* Barre dettaglio */}
-            <div style={{ flex: 1, minWidth: 200 }}>
-              {perOperatore.map(op => (
-                <BarraOrizzontale
-                  key={op.nome}
-                  label={op.nome}
-                  value={op.totale}
-                  max={maxOpTotale}
-                  color={op.colore}
-                  extra={`/ ${op.completati} completati`}
-                />
-              ))}
-            </div>
-          </div>
+          )}
 
-          {/* ── DRILL-DOWN OPERATORE ── */}
+          {/* ── DRILL-DOWN: admin → cliccabile, operatore → sempre aperto su sé stesso ── */}
           <AnimatePresence>
-          {opSelezionato && (() => {
-            const apOp = apMese.filter(a => a.operatori?.id === opSelezionato.id || a.operatore_id === opSelezionato.id);
+          {(() => {
+            const soggetto = isAdmin ? opSelezionato : (opCorrente
+              ? { ...opCorrente, totale: apMeseVis.length, completati: apMeseVis.filter(a => a.stato === 'completato').length }
+              : null);
+            if (!soggetto) return null;
+            const apOp = apMese.filter(a => a.operatori?.id === soggetto.id || a.operatore_id === soggetto.id);
             const completatiOp = apOp.filter(a => a.stato === 'completato');
             const incassoOp = completatiOp.reduce((s,a) => s + Number(a.prezzo_confermato || a.prezzo_proposto || 0), 0);
             const mediaOp   = completatiOp.length > 0 ? incassoOp / completatiOp.length : 0;
@@ -1191,29 +1212,32 @@ export default function StatisticheView() {
 
             return (
               <motion.div
-                key={opSelezionato.nome}
+                key={soggetto.nome}
                 initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }} exit={{ opacity:0, height:0 }}
                 style={{ overflow:'hidden', marginTop:20 }}
               >
-                <div style={{ borderTop:`2px solid ${opSelezionato.colore}30`, paddingTop:18 }}>
+                <div style={{ borderTop:`2px solid ${soggetto.colore}30`, paddingTop:18 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-                    <div style={{ width:32, height:32, borderRadius:10, background:opSelezionato.colore,
+                    <div style={{ width:32, height:32, borderRadius:10, background:soggetto.colore,
                       display:'flex', alignItems:'center', justifyContent:'center',
                       fontSize:14, fontWeight:800, color:'#fff' }}>
-                      {opSelezionato.nome[0]}
+                      {soggetto.nome[0]}
                     </div>
                     <div style={{ fontSize:15, fontWeight:700, color:'var(--text-primary)' }}>
-                      {opSelezionato.nome} — {meseLabel}
+                      {soggetto.nome} — {meseLabel}
                     </div>
-                    <button onClick={() => setOpSelezionato(null)}
-                      style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer',
-                        fontSize:18, color:'var(--text-muted)' }}>×</button>
+                    {/* Bottone chiudi — solo per admin */}
+                    {isAdmin && (
+                      <button onClick={() => setOpSelezionato(null)}
+                        style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer',
+                          fontSize:18, color:'var(--text-muted)' }}>×</button>
+                    )}
                   </div>
 
                   {/* KPI operatore */}
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:16 }}>
                     {[
-                      { label:'Appuntamenti', val: apOp.length,             color: opSelezionato.colore },
+                      { label:'Appuntamenti', val: apOp.length,             color: soggetto.colore },
                       { label:'Completati',   val: completatiOp.length,     color:'#059669' },
                       { label:'Incasso',      val:`€${incassoOp.toFixed(0)}`,color:'#2563eb' },
                       { label:'Media/sessione',val:`€${mediaOp.toFixed(0)}`,  color:'#7c3aed' },
@@ -1237,10 +1261,10 @@ export default function StatisticheView() {
                     <div style={{ display:'flex', alignItems:'flex-end', gap:6, height:50 }}>
                       {perGiorno.map((cnt, i) => (
                         <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, height:'100%', justifyContent:'flex-end' }}>
-                          <div style={{ width:'100%', borderRadius:4, background: opSelezionato.colore,
+                          <div style={{ width:'100%', borderRadius:4, background: soggetto.colore,
                             height:`${(cnt/maxGiorno)*100}%`, minHeight: cnt>0?4:0, opacity: cnt>0?1:0.15 }}/>
                           <div style={{ fontSize:9, fontWeight:600, color:'var(--text-muted)' }}>{giorni[i]}</div>
-                          {cnt > 0 && <div style={{ fontSize:9, fontWeight:700, color:opSelezionato.colore }}>{cnt}</div>}
+                          {cnt > 0 && <div style={{ fontSize:9, fontWeight:700, color:soggetto.colore }}>{cnt}</div>}
                         </div>
                       ))}
                     </div>
@@ -1256,8 +1280,8 @@ export default function StatisticheView() {
                         <div key={nome} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
                           <div style={{ fontSize:12, color:'var(--text-secondary)', minWidth:16, fontWeight:700 }}>{i+1}.</div>
                           <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)', flex:1 }}>{nome}</div>
-                          <div style={{ fontSize:12, fontWeight:700, color:opSelezionato.colore,
-                            background:`${opSelezionato.colore}18`, padding:'2px 8px', borderRadius:20 }}>{cnt}×</div>
+                          <div style={{ fontSize:12, fontWeight:700, color:soggetto.colore,
+                            background:`${soggetto.colore}18`, padding:'2px 8px', borderRadius:20 }}>{cnt}×</div>
                         </div>
                       ))}
                     </div>

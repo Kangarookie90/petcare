@@ -540,13 +540,27 @@ export default function App() {
     );
   }
 
+  // ── Ruolo utente — default a 'operatore' se non impostato (sicuro by default) ──
+  const role    = session?.user?.user_metadata?.role ?? 'operatore';
+  const isAdmin = role === 'admin';
+
+  // ── Viste accessibili per ruolo ──────────────────────────────
+  const VISTE_ADMIN_ONLY = ['social'];
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
 
   const handleNav = (id) => {
+    // Blocca navigazione a viste non consentite
+    if (VISTE_ADMIN_ONLY.includes(id) && !isAdmin) return;
     setActive(id);
   };
+
+  // Se l'utente è su una vista non consentita (es. dopo downgrade ruolo) → redirect home
+  if (VISTE_ADMIN_ONLY.includes(active) && !isAdmin) {
+    setActive('home');
+  }
 
   const renderView = () => {
     switch (active) {
@@ -555,11 +569,11 @@ export default function App() {
       case "prossimi":   return <ProssimiView key="prossimi" />;
       case "clienti":    return <ClientiView key="clienti" onNavigateToPet={(id) => { setPendingPetId(id); setActive('pet'); }} />;
       case "pet":        return <PetView key="pet" initialPetId={pendingPetId} onPetOpened={() => setPendingPetId(null)} />;
-      case "impostazioni": return <ImpostazioniView key="impostazioni" />;
-      case "statistiche":  return <StatisticheView key="statistiche" />;
+      case "impostazioni": return <ImpostazioniView key="impostazioni" role={role} />;
+      case "statistiche":  return <StatisticheView key="statistiche" role={role} />;
       case "primanota":    return <PrimanotaView key="primanota" />;
-      case "social":       return <SocialView key="social" />;
-      case "dashboard_op": return <DashboardOperatoreView key="dashboard_op" />;
+      case "social":       return isAdmin ? <SocialView key="social" /> : null;
+      case "dashboard_op": return <DashboardOperatoreView key="dashboard_op" role={role} session={session} />;
       case "lista_attesa": return <ListaAttesaView key="lista_attesa" onNavigateToCalendario={() => setActive('calendario')} />;
       default:           return null;
     }
@@ -848,7 +862,7 @@ export default function App() {
             </div>
             <span>Nemora</span>
           </div>
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter(item => !(VISTE_ADMIN_ONLY.includes(item.id) && !isAdmin)).map((item) => (
             <motion.button
               key={item.id}
               className={"sidebar-item" + (active === item.id ? " active" : "")}
@@ -1014,7 +1028,7 @@ export default function App() {
         <AnimatePresence>
           {!navHidden && (() => {
             const NAV_MAIN  = NAV_ITEMS.filter(i => ['home','calendario','clienti','pet'].includes(i.id));
-            const NAV_EXTRA = NAV_ITEMS.filter(i => !['home','calendario','clienti','pet'].includes(i.id));
+            const NAV_EXTRA = NAV_ITEMS.filter(i => !['home','calendario','clienti','pet'].includes(i.id) && !(VISTE_ADMIN_ONLY.includes(i.id) && !isAdmin));
             return (
               <motion.nav
                 className="bottom-nav"

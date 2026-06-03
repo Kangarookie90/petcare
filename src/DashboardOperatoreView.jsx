@@ -31,7 +31,9 @@ const STATI_COLORI = {
 
 const fmtOra = d => new Date(d).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
 
-export default function DashboardOperatoreView() {
+export default function DashboardOperatoreView({ role, session }) {
+  const isAdmin = role === 'admin';
+
   const [operatori,     setOperatori]     = useState([]);
   const [opSel,         setOpSel]         = useState(null);
   const [appuntamenti,  setAppuntamenti]  = useState([]);
@@ -41,10 +43,18 @@ export default function DashboardOperatoreView() {
   const [showDone,      setShowDone]      = useState(null); // id completato
   const timerRef = useRef(null);
 
-  // Carica operatori
+  // Carica operatori e, se non admin, auto-seleziona il proprio record
   useEffect(() => {
-    supabase.from('operatori').select('id,nome,cognome,colore').eq('attivo', true).order('nome')
-      .then(({ data }) => setOperatori(data || []));
+    supabase.from('operatori').select('id,nome,cognome,colore,email').eq('attivo', true).order('nome')
+      .then(({ data }) => {
+        const lista = data || [];
+        setOperatori(lista);
+        // L'operatore salta la schermata di selezione: auto-seleziona sé stesso
+        if (!isAdmin && session?.user?.email) {
+          const proprio = lista.find(op => op.email === session.user.email);
+          if (proprio) setOpSel(proprio);
+        }
+      });
   }, []);
 
   // Carica appuntamenti del giorno per l'operatore selezionato
@@ -104,8 +114,27 @@ export default function DashboardOperatoreView() {
 
   const specieEmoji = s => s === 'gatto' ? '🐈' : s === 'coniglio' ? '🐇' : '🐕';
 
-  // ── Selezione operatore ──────────────────────────────────
+  // ── Selezione operatore — solo per admin ─────────────────
   if (!opSel) {
+    // L'operatore non dovrebbe mai arrivare qui (auto-selezione al mount).
+    // Se ci arriva significa che la sua email non è in tabella operatori.
+    if (!isAdmin) {
+      return (
+        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+          style={{ padding:'0 0 2rem', width:'100%' }}>
+          <div style={{ ...glass, padding:'32px 24px', textAlign:'center' }}>
+            <div style={{ fontSize:36, marginBottom:12 }}>🔍</div>
+            <p style={{ margin:'0 0 8px', fontSize:15, fontWeight:700, color:'var(--text-primary)' }}>
+              Profilo non trovato
+            </p>
+            <p style={{ margin:0, fontSize:13, color:'var(--text-secondary)', lineHeight:1.6 }}>
+              Il tuo account non è ancora collegato a un operatore.<br/>
+              Chiedi all'amministratore di aggiungere la tua email al tuo profilo operatore.
+            </p>
+          </div>
+        </motion.div>
+      );
+    }
     return (
       <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
         style={{ padding:'0 0 2rem', width:'100%' }}>
@@ -175,12 +204,14 @@ export default function DashboardOperatoreView() {
             {new Date().toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
           </div>
         </div>
-        <button onClick={() => { setOpSel(null); setApInCorso(null); }}
-          style={{ background:'var(--card-bg-sm)', border:'1px solid var(--card-border-sm)',
-            borderRadius:10, padding:'7px 12px', cursor:'pointer', fontFamily:'inherit',
-            fontSize:12, fontWeight:600, color:'var(--text-secondary)' }}>
-          Cambia
-        </button>
+        {isAdmin && (
+          <button onClick={() => { setOpSel(null); setApInCorso(null); }}
+            style={{ background:'var(--card-bg-sm)', border:'1px solid var(--card-border-sm)',
+              borderRadius:10, padding:'7px 12px', cursor:'pointer', fontFamily:'inherit',
+              fontSize:12, fontWeight:600, color:'var(--text-secondary)' }}>
+            Cambia
+          </button>
+        )}
       </div>
 
       {/* Barra progresso giornata */}

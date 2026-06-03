@@ -494,7 +494,7 @@ function BackupTab() {
 // ─────────────────────────────────────────────────────────────
 // VIEW PRINCIPALE con tab
 // ─────────────────────────────────────────────────────────────
-const TABS = [
+const TABS_ADMIN = [
   {
     id: 'operatori', label: 'Operatori',
     icon: (
@@ -539,11 +539,17 @@ const TABS = [
   },
 ];
 
-export default function ImpostazioniView({ initialTab }) {
-  const [tab, setTab] = useState(initialTab || 'operatori');
+export default function ImpostazioniView({ initialTab, role }) {
+  const isAdmin = role === 'admin';
+
+  // L'operatore atterra sempre su profilo; l'admin sull'ultima tab visitata (o operatori)
+  const [tab, setTab] = useState(isAdmin ? (initialTab || 'operatori') : 'profilo');
+
+  // Tab effettivamente mostrata — l'operatore è bloccato su profilo
+  const tabAttiva = isAdmin ? tab : 'profilo';
 
   const renderTab = () => {
-    switch (tab) {
+    switch (tabAttiva) {
       case 'operatori': return <OperatoriView />;
       case 'servizi':   return <ServiziTab />;
       case 'profilo':   return <ProfiloView />;
@@ -551,6 +557,10 @@ export default function ImpostazioniView({ initialTab }) {
       default:          return null;
     }
   };
+
+  const titoloHeader = isAdmin
+    ? TABS_ADMIN.find(t => t.id === tab)?.label
+    : 'Profilo';
 
   return (
     <div style={{ width: '100%', paddingBottom: '2rem' }}>
@@ -562,49 +572,51 @@ export default function ImpostazioniView({ initialTab }) {
           Impostazioni
         </p>
         <h1 style={{ fontSize: 30, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.6px' }}>
-          {TABS.find(t => t.id === tab)?.label}
+          {titoloHeader}
         </h1>
       </motion.div>
 
-      {/* Tab bar */}
-      <div style={{
-        display: 'flex', gap: 4, marginBottom: 20,
-        background: 'var(--card-bg-sm)',
-        border: '1px solid var(--card-border-sm)',
-        borderRadius: 16, padding: 5,
-        overflowX: 'auto',
-      }}>
-        {TABS.map(t => {
-          const active = tab === t.id;
-          return (
-            <motion.button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              whileTap={{ scale: 0.96 }}
-              style={{
-                flex: '1 0 auto',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '8px 12px', borderRadius: 12,
-                border: active ? '1px solid rgba(255,255,255,0.85)' : '1px solid transparent',
-                background: active ? 'rgba(255,255,255,0.65)' : 'transparent',
-                boxShadow: active ? '0 2px 0 rgba(255,255,255,0.9) inset, 0 2px 8px rgba(60,100,200,0.12)' : 'none',
-                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontSize: 13, fontWeight: active ? 700 : 500,
-                cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'all 0.18s', whiteSpace: 'nowrap',
-              }}
-            >
-              {t.icon}
-              {t.label}
-            </motion.button>
-          );
-        })}
-      </div>
+      {/* Tab bar — solo admin */}
+      {isAdmin && (
+        <div style={{
+          display: 'flex', gap: 4, marginBottom: 20,
+          background: 'var(--card-bg-sm)',
+          border: '1px solid var(--card-border-sm)',
+          borderRadius: 16, padding: 5,
+          overflowX: 'auto',
+        }}>
+          {TABS_ADMIN.map(t => {
+            const active = tab === t.id;
+            return (
+              <motion.button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                whileTap={{ scale: 0.96 }}
+                style={{
+                  flex: '1 0 auto',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '8px 12px', borderRadius: 12,
+                  border: active ? '1px solid rgba(255,255,255,0.85)' : '1px solid transparent',
+                  background: active ? 'rgba(255,255,255,0.65)' : 'transparent',
+                  boxShadow: active ? '0 2px 0 rgba(255,255,255,0.9) inset, 0 2px 8px rgba(60,100,200,0.12)' : 'none',
+                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                  fontSize: 13, fontWeight: active ? 700 : 500,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all 0.18s', whiteSpace: 'nowrap',
+                }}
+              >
+                {t.icon}
+                {t.label}
+              </motion.button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Contenuto tab con transizione */}
       <AnimatePresence mode="wait">
         <motion.div
-          key={tab}
+          key={tabAttiva}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{   opacity: 0, y: -4 }}
