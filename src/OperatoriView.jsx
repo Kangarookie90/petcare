@@ -415,19 +415,278 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
             {loading ? 'Salvataggio...' : isEdit ? 'Salva modifiche' : '+ Aggiungi operatore'}
           </button>
         </div>
+
+        {/* Gestione ruolo — solo per operatori esistenti con auth_user_id */}
+        {isEdit && operatore?.auth_user_id && (
+          <RuoloManager operatore={operatore} onRuoloChanged={(nuovoRuolo) => onSaved({ ...operatore, ruolo: nuovoRuolo })} />
+        )}
       </motion.div>
     </motion.div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
+// GESTIONE RUOLO — promuovi / revoca
+// ─────────────────────────────────────────────────────────────
+function RuoloManager({ operatore, onRuoloChanged }) {
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
+  const [confirm,  setConfirm]  = useState(false);
+
+  const ruoloAttuale = operatore.ruolo || 'operatore';
+  const isAdmin      = ruoloAttuale === 'admin';
+  const nuovoRuolo   = isAdmin ? 'operatore' : 'admin';
+  const label        = isAdmin ? 'Revoca admin → operatore' : 'Promuovi ad admin';
+  const colorAccent  = isAdmin ? '#d97706' : '#2563eb';
+
+  const cambia = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/set-role`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ userId: operatore.auth_user_id, role: nuovoRuolo }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) { setError(json.error || 'Errore durante il cambio ruolo.'); return; }
+      // Aggiorna anche la colonna locale su operatori
+      await supabase.from('operatori').update({ ruolo: nuovoRuolo }).eq('id', operatore.id);
+      onRuoloChanged(nuovoRuolo);
+      setConfirm(false);
+    } catch (e) {
+      setError('Errore di rete. Riprova.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 16, borderTop: '1px solid var(--card-border)', paddingTop: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+        Ruolo account
+      </div>
+
+      <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+          background: isAdmin ? 'rgba(37,99,235,0.12)' : 'rgba(5,150,105,0.1)',
+          color: isAdmin ? '#2563eb' : '#059669',
+        }}>
+          {ruoloAttuale}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
+          {isAdmin ? 'Accesso completo a tutte le funzioni' : 'Accesso operativo, senza gestione avanzata'}
+        </span>
+      </div>
+
+      {error && (
+        <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 8 }}>{error}</div>
+      )}
+
+      {!confirm ? (
+        <button onClick={() => setConfirm(true)}
+          style={{ width: '100%', padding: '9px', borderRadius: 12, cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+            border: `1px solid ${colorAccent}30`,
+            background: `${colorAccent}0d`, color: colorAccent }}>
+          {label}
+        </button>
+      ) : (
+        <div style={{ ...glassCard, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <p style={{ margin: 0, flex: 1, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Cambia ruolo a <strong>{nuovoRuolo}</strong>?
+          </p>
+          <button onClick={cambia} disabled={loading}
+            style={{ padding: '7px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+              background: colorAccent, color: '#fff', opacity: loading ? 0.6 : 1 }}>
+            {loading ? '...' : 'Conferma'}
+          </button>
+          <button onClick={() => setConfirm(false)}
+            style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>
+            No
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // COMPONENTE PRINCIPALE
 // ─────────────────────────────────────────────────────────────
+// ── Modal Invito Operatore via Email ─────────────────────────
+function ModalInvito({ onClose, onInviato }) {
+  const [f, setF] = useState({ email: '', nome: '', cognome: '' });
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  const invia = async () => {
+    if (!f.email.trim() || !f.nome.trim() || !f.cognome.trim()) {
+      setError('Tutti i campi sono obbligatori.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-operatore`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            email:   f.email.trim().toLowerCase(),
+            nome:    f.nome.trim(),
+            cognome: f.cognome.trim(),
+          }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) { setError(json.error || 'Errore durante l\'invio.'); return; }
+
+      setSuccess(true);
+      onInviato?.({ nome: f.nome, cognome: f.cognome, email: f.email });
+    } catch (e) {
+      setError('Errore di rete. Riprova.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(10,24,64,0.4)',
+        backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0,  scale: 1 }}
+        exit={{   opacity: 0, y: 12,  scale: 0.98 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+        style={{ ...glass, width: '100%', maxWidth: 420, padding: '28px 24px' }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+              Invita operatore
+            </h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+              Riceverà un'email con il link per accedere
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+
+        {success ? (
+          /* Stato: invito inviato */
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>✉️</div>
+            <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Invito inviato!
+            </p>
+            <p style={{ margin: '0 0 24px', fontSize: 13, color: 'var(--text-secondary)' }}>
+              {f.nome} {f.cognome} riceverà un'email a <strong>{f.email}</strong> con il link per impostare la password.
+            </p>
+            <button onClick={onClose} style={{ ...btnPrimary, width: '100%' }}>
+              Chiudi
+            </button>
+          </motion.div>
+        ) : (
+          /* Form */
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <p style={secLabel}>Nome *</p>
+                <input style={inputStyle} value={f.nome} onChange={e => set('nome', e.target.value)}
+                  placeholder="Mario" autoFocus />
+              </div>
+              <div>
+                <p style={secLabel}>Cognome *</p>
+                <input style={inputStyle} value={f.cognome} onChange={e => set('cognome', e.target.value)}
+                  placeholder="Rossi" />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <p style={secLabel}>Email *</p>
+              <input style={inputStyle} type="email" value={f.email}
+                onChange={e => set('email', e.target.value)}
+                placeholder="mario.rossi@email.com"
+                onKeyDown={e => e.key === 'Enter' && invia()} />
+            </div>
+
+            {/* Info ruolo */}
+            <div style={{
+              ...glassCard, padding: '10px 14px', marginBottom: 16,
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+              </svg>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Il nuovo utente entrerà come <strong style={{ color: 'var(--text-primary)' }}>operatore</strong>.
+                Potrai promuoverlo ad admin in seguito.
+              </p>
+            </div>
+
+            {error && (
+              <p style={{ fontSize: 13, color: '#dc2626', margin: '-4px 0 14px', fontWeight: 500 }}>{error}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={invia} disabled={loading}
+                style={{ ...btnPrimary, flex: 1, opacity: loading ? 0.6 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {loading ? 'Invio in corso...' : (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
+                    </svg>
+                    Invia invito
+                  </>
+                )}
+              </button>
+              <button onClick={onClose} style={btnSecondary}>Annulla</button>
+            </div>
+          </>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export default function OperatoriView() {
-  const [operatori,  setOperatori]  = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [showModal,  setShowModal]  = useState(false);
-  const [selected,   setSelected]   = useState(null); // operatore da modificare
+  const [operatori,   setOperatori]  = useState([]);
+  const [loading,     setLoading]    = useState(true);
+  const [showModal,   setShowModal]  = useState(false);
+  const [selected,    setSelected]   = useState(null);
+  const [showInvito,  setShowInvito] = useState(false);
+  const [toastInvito, setToastInvito] = useState(null); // { nome, cognome }
 
   useEffect(() => { fetchOperatori(); }, []);
 
@@ -475,14 +734,27 @@ export default function OperatoriView() {
             {attivi.length} attivi{disattivi.length > 0 ? `, ${disattivi.length} disattivati` : ''}
           </div>
         </div>
-        <motion.button
-          whileHover={{ y: -1 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => { setSelected(null); setShowModal(true); }}
-          style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}
-        >
-          <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Nuovo operatore
-        </motion.button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <motion.button
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowInvito(true)}
+            style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/>
+            </svg>
+            Invita
+          </motion.button>
+          <motion.button
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => { setSelected(null); setShowModal(true); }}
+            style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Nuovo
+          </motion.button>
+        </div>
       </motion.div>
 
       {loading ? (
@@ -564,7 +836,7 @@ export default function OperatoriView() {
         </>
       )}
 
-      {/* Modal */}
+      {/* Modal modifica */}
       <AnimatePresence>
         {showModal && (
           <ModalOperatore
@@ -573,6 +845,42 @@ export default function OperatoriView() {
             onSaved={handleSaved}
             onDeleted={handleDeleted}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Modal invito */}
+      <AnimatePresence>
+        {showInvito && (
+          <ModalInvito
+            onClose={() => setShowInvito(false)}
+            onInviato={(op) => {
+              setShowInvito(false);
+              setToastInvito(op);
+              setTimeout(() => setToastInvito(null), 4000);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Toast conferma invito */}
+      <AnimatePresence>
+        {toastInvito && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            style={{
+              position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
+              zIndex: 400, background: 'rgba(5,150,105,0.95)', color: '#fff',
+              padding: '12px 20px', borderRadius: 16, fontSize: 13, fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: 8,
+              boxShadow: '0 4px 20px rgba(5,150,105,0.4)',
+              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ✉️ Invito inviato a {toastInvito.nome} {toastInvito.cognome}
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
@@ -646,8 +954,16 @@ function OperatoreCard({ operatore: op, delay, disattivo, onClick }) {
         )}
       </div>
 
-      {/* Colore badge + freccia */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      {/* Badge ruolo + colore + freccia */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {op.ruolo === 'admin' && (
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+            background: 'rgba(37,99,235,0.12)', color: '#2563eb', letterSpacing: '0.3px',
+          }}>
+            admin
+          </span>
+        )}
         <div style={{
           width: 12, height: 12, borderRadius: '50%',
           background: op.colore || '#2563eb',
