@@ -94,4 +94,24 @@ db.version(6).stores({
   _sync:                 'chiave',
 });
 
+// ── v7: ruolo e auth_user_id su operatori ─────────────────────
+// Aggiunge l'indice su ruolo per filtrare offline (es. lista admin).
+// auth_user_id non è indicizzato — viene letto ma non filtrato localmente.
+// syncService scarica i nuovi campi automaticamente con SELECT *.
+db.version(7).stores({
+  clienti:               'id, cognome, nome, created_at',
+  animali:               'id, cliente_id, nome, specie',
+  operatori:             'id, nome, attivo, ruolo',
+  servizi:               'id, nome',
+  razze:                 'id, nome, specie',
+  appuntamenti:          'id, inizio, fine, stato, cliente_id, animale_id, operatore_id',
+  primanota:             'id, data, appuntamento_id, operatore_id, tipo',
+  appuntamenti_servizi:  'id, appuntamento_id, servizio_id',
+  appuntamenti_animali:  'id, appuntamento_id, animale_id',
+  notifiche:             'id, tipo, appuntamento_id, letto, created_at',
+  lista_attesa:          'id, cliente_id, animale_id, operatore_id, stato, priorita, created_at',
+  _coda:                 '++id, tabella, action, created_at',
+  _sync:                 'chiave',
+});
+
 export default db;

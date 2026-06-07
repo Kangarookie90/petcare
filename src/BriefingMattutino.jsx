@@ -86,21 +86,23 @@ Istruzioni:
 }
 
 // ── Componente principale ─────────────────────────────────────
-export default function BriefingMattutino({ appuntamenti, inattivi, loading }) {
+export default function BriefingMattutino({ appuntamenti, inattivi, loading, inativiPronti }) {
   const [testo,    setTesto]    = useState(() => getCached()); // carica da cache subito
   const [genera,   setGenera]   = useState(false);             // avvia la chiamata
   const [errore,   setErrore]   = useState('');
   const [carica,   setCarica]   = useState(false);
   const [espanso,  setEspanso]  = useState(true);              // collassabile
 
-  // Avvia generazione automatica quando i dati sono pronti,
-  // ma solo se non c'è già un testo in cache per oggi
+  // Avvia generazione solo quando ENTRAMBE le fasi di caricamento sono complete:
+  // - loading=false → appuntamenti di oggi pronti (Fase 1)
+  // - inativiPronti=true → clienti inattivi pronti (Fase 2)
+  // Così il briefing include sempre tutti i dati rilevanti.
   useEffect(() => {
-    if (loading) return;           // aspetta che HomeView abbia finito di caricare
-    if (getCached()) return;       // già generato oggi
-    if (appuntamenti.length === 0 && inattivi.length === 0) return; // niente da dire
+    if (loading || !inativiPronti) return; // aspetta entrambe le fasi
+    if (getCached()) return;               // già generato oggi
+    if (appuntamenti.length === 0 && inattivi.length === 0) return;
     setGenera(true);
-  }, [loading, appuntamenti.length, inattivi.length]);
+  }, [loading, inativiPronti]);
 
   // Effettua la chiamata API quando genera === true
   useEffect(() => {
@@ -137,7 +139,7 @@ export default function BriefingMattutino({ appuntamenti, inattivi, loading }) {
   }, [genera]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Non mostrare nulla se i dati stanno ancora caricando e non c'è cache
-  if (loading && !testo) return null;
+  if ((loading || !inativiPronti) && !testo) return null;
 
   // Non mostrare se giornata vuota e niente cache
   if (!testo && !carica && !errore && appuntamenti.length === 0) return null;

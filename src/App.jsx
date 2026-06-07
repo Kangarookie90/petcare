@@ -178,6 +178,7 @@ function HomeView() {
   const [dati, setDati] = useState({ operatori: [], appuntamenti: [], totaleOggi: 0, inAttesa: 0, totaleClienti: 0 });
   const [loading, setLoading] = useState(true);
   const [inattivi, setInattivi] = useState([]);
+  const [inativiPronti, setInativiPronti] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -216,27 +217,35 @@ function HomeView() {
       setLoading(false); // ← sblocca subito il render
 
       // ── Fase 2: inattivi in background, non blocca la UI ──────
-      const soglia60 = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: apTuttiData } = await supabase
-        .from("appuntamenti")
-        .select("id, inizio, clienti(id, nome, cognome, telefono), animali(nome)")
-        .gte("inizio", soglia60)
-        .order("inizio", { ascending: false })
-        .limit(1000);
+      // Strategia: prendi gli appuntamenti COMPLETATI più recenti per cliente
+      // usando una finestra temporale ampia (18 mesi), poi filtra chi
+      // non ha appuntamenti negli ultimi 60 giorni.
+      // Limit 200 → dataset piccolo, query veloce.
+      const soglia60  = new Date(Date.now() -  60 * 24 * 60 * 60 * 1000).toISOString();
+      const soglia18m = new Date(Date.now() - 548 * 24 * 60 * 60 * 1000).toISOString();
 
-      const tuttiAp = apTuttiData || [];
+      const { data: apRecentiData } = await supabase
+        .from("appuntamenti")
+        .select("id, inizio, cliente_id, clienti(id, nome, cognome, telefono), animali(nome)")
+        .eq("stato", "completato")
+        .gte("inizio", soglia18m)          // ultimi 18 mesi — finestra ragionevole
+        .order("inizio", { ascending: false })
+        .limit(200);                        // basta trovare l'ultimo per ogni cliente
+
+      // Tieni solo l'appuntamento più recente per ogni cliente
       const ultimoPerCliente = {};
-      tuttiAp.forEach(a => {
-        const cid = a.clienti?.id;
+      (apRecentiData || []).forEach(a => {
+        const cid = a.clienti?.id || a.cliente_id;
         if (!cid) return;
-        if (!ultimoPerCliente[cid] || new Date(a.inizio) > new Date(ultimoPerCliente[cid].inizio)) {
-          ultimoPerCliente[cid] = a;
-        }
+        if (!ultimoPerCliente[cid]) ultimoPerCliente[cid] = a; // già ordinato desc
       });
+
+      // Inattivi = chi non compare tra i recenti degli ultimi 60gg
       const listaInattivi = Object.values(ultimoPerCliente)
         .filter(a => new Date(a.inizio) < new Date(soglia60))
         .sort((a, b) => new Date(a.inizio) - new Date(b.inizio));
       setInattivi(listaInattivi);
+      setInativiPronti(true);
     };
     load();
   }, []);
@@ -265,6 +274,7 @@ function HomeView() {
           appuntamenti={dati.appuntamenti}
           inattivi={inattivi}
           loading={loading}
+          inativiPronti={inativiPronti}
         />
       </motion.div>
 
