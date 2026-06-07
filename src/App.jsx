@@ -479,7 +479,8 @@ export default function App() {
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showRicerca,    setShowRicerca]    = useState(false);
-  const [pendingPetId,   setPendingPetId]   = useState(null);
+  const [pendingPetId,     setPendingPetId]     = useState(null);
+  const [pendingClienteId, setPendingClienteId] = useState(null);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [showEasterEgg,  setShowEasterEgg]  = useState(false);
   const [session, setSession] = useState(undefined);
@@ -577,7 +578,7 @@ export default function App() {
       case "home":       return <HomeView key="home" />;
       case "calendario": return <CalendarioView />;
       case "prossimi":   return <ProssimiView key="prossimi" />;
-      case "clienti":    return <ClientiView key="clienti" onNavigateToPet={(id) => { setPendingPetId(id); setActive('pet'); }} />;
+      case "clienti":    return <ClientiView key="clienti" initialClienteId={pendingClienteId} onClienteOpened={() => setPendingClienteId(null)} onNavigateToPet={(id) => { setPendingPetId(id); setActive('pet'); }} />;
       case "pet":        return <PetView key="pet" initialPetId={pendingPetId} onPetOpened={() => setPendingPetId(null)} />;
       case "impostazioni": return <ImpostazioniView key="impostazioni" role={role} />;
       case "statistiche":  return <StatisticheView key="statistiche" role={role} />;
@@ -1157,7 +1158,11 @@ export default function App() {
 
       {/* Ricerca globale overlay */}
       <AnimatePresence>
-        {showRicerca && <RicercaGlobale onClose={() => setShowRicerca(false)} onNavigate={(id) => { setActive(id); }} />}
+        {showRicerca && <RicercaGlobale onClose={() => setShowRicerca(false)} onNavigate={(id, opts = {}) => {
+              if (opts.petId)      { setPendingPetId(opts.petId); }
+              if (opts.clienteId)  { setPendingClienteId(opts.clienteId); }
+              handleNav(id);
+            }} />}
       </AnimatePresence>
 
       {/* ── Easter egg: Il cuore di Nemora ── */}
