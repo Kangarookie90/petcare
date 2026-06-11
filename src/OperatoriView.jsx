@@ -420,8 +420,209 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
         {isEdit && operatore?.auth_user_id && (
           <RuoloManager operatore={operatore} onRuoloChanged={(nuovoRuolo) => onSaved({ ...operatore, ruolo: nuovoRuolo })} />
         )}
+
+        {/* Orari lavorativi — solo in modifica */}
+        {isEdit && <OrariOperatore operatore={operatore} />}
       </motion.div>
     </motion.div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// ORARI LAVORATIVI — configurazione per operatore
+// ─────────────────────────────────────────────────────────────
+const GIORNI = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+const GIORNI_FULL = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+
+function OrariOperatore({ operatore }) {
+  const [orari,   setOrari]   = useState([]); // array di 7 elementi (uno per giorno)
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+
+  // Carica orari esistenti e normalizza in array[0..6]
+  useEffect(() => {
+    if (!operatore?.id) return;
+    supabase.from('operatori_orari')
+      .select('*')
+      .eq('operatore_id', operatore.id)
+      .then(({ data }) => {
+        const base = Array.from({ length: 7 }, (_, g) => ({
+          giorno_settimana: g,
+          ora_inizio: '09:00',
+          ora_fine:   '18:00',
+          attivo:     g >= 1 && g <= 5, // Lun-Ven attivi di default
+          _id:        null,
+        }));
+        (data || []).forEach(r => {
+          base[r.giorno_settimana] = {
+            giorno_settimana: r.giorno_settimana,
+            ora_inizio: r.ora_inizio.slice(0, 5),
+            ora_fine:   r.ora_fine.slice(0, 5),
+            attivo:     r.attivo,
+            _id:        r.id,
+          };
+        });
+        setOrari(base);
+        setLoading(false);
+      });
+  }, [operatore?.id]);
+
+  const updateGiorno = (g, campo, val) => {
+    setOrari(prev => prev.map((r, i) => i === g ? { ...r, [campo]: val } : r));
+    setSaved(false);
+  };
+
+  const salva = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      for (const o of orari) {
+        const payload = {
+          operatore_id:     operatore.id,
+          giorno_settimana: o.giorno_settimana,
+          ora_inizio:       o.ora_inizio,
+          ora_fine:         o.ora_fine,
+          attivo:           o.attivo,
+        };
+        if (o._id) {
+          await supabase.from('operatori_orari').update(payload).eq('id', o._id);
+        } else {
+          const { data } = await supabase.from('operatori_orari').insert(payload).select().single();
+          if (data) {
+            setOrari(prev => prev.map((r, i) =>
+              i === o.giorno_settimana ? { ...r, _id: data.id } : r
+            ));
+          }
+        }
+      }
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return (
+    <div style={{ padding: '12px 0', fontSize: 12, color: 'var(--text-muted)' }}>
+      Caricamento orari...
+    </div>
+  );
+
+  // Calcola ore settimanali totali
+  const oreSettimana = orari
+    .filter(o => o.attivo)
+    .reduce((tot, o) => {
+      const [hi, mi] = o.ora_inizio.split(':').map(Number);
+      const [hf, mf] = o.ora_fine.split(':').map(Number);
+      return tot + Math.max(0, (hf * 60 + mf) - (hi * 60 + mi));
+    }, 0);
+  const oreH = Math.floor(oreSettimana / 60);
+  const oreM = oreSettimana % 60;
+
+  return (
+    <div style={{ marginTop: 16, borderTop: '1px solid var(--card-border)', paddingTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Orari lavorativi
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)',
+          background: 'var(--card-bg-sm)', border: '1px solid var(--card-border-sm)',
+          borderRadius: 8, padding: '2px 8px' }}>
+          {oreH}h{oreM > 0 ? `${oreM}m` : ''} / settimana
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {orari.map((o, g) => (
+          <div key={g} style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 10px', borderRadius: 12,
+            background: o.attivo ? 'var(--card-bg-sm)' : 'transparent',
+            border: `1px solid ${o.attivo ? 'var(--card-border-sm)' : 'transparent'}`,
+            opacity: o.attivo ? 1 : 0.5,
+            transition: 'all 0.15s',
+          }}>
+            {/* Toggle giorno */}
+            <button onClick={() => updateGiorno(g, 'attivo', !o.attivo)}
+              style={{
+                width: 34, height: 20, borderRadius: 99, flexShrink: 0,
+                background: o.attivo ? operatore?.colore || '#2563eb' : 'var(--card-border)',
+                border: 'none', cursor: 'pointer', position: 'relative',
+                transition: 'background 0.18s',
+              }}>
+              <motion.div
+                animate={{ x: o.attivo ? 16 : 2 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                style={{ position: 'absolute', top: 2, width: 16, height: 16,
+                  borderRadius: '50%', background: '#fff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}
+              />
+            </button>
+
+            {/* Nome giorno */}
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
+              minWidth: 32 }}>
+              {GIORNI[g]}
+            </span>
+
+            {/* Orari — visibili solo se attivo */}
+            {o.attivo ? (
+              <>
+                <input
+                  type="time"
+                  value={o.ora_inizio}
+                  onChange={e => updateGiorno(g, 'ora_inizio', e.target.value)}
+                  style={{ ...inputStyle, flex: 1, padding: '5px 8px', fontSize: 13,
+                    minWidth: 0, textAlign: 'center' }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>→</span>
+                <input
+                  type="time"
+                  value={o.ora_fine}
+                  onChange={e => updateGiorno(g, 'ora_fine', e.target.value)}
+                  style={{ ...inputStyle, flex: 1, padding: '5px 8px', fontSize: 13,
+                    minWidth: 0, textAlign: 'center' }}
+                />
+                {/* Ore del giorno */}
+                <span style={{ fontSize: 11, color: 'var(--text-muted)',
+                  flexShrink: 0, minWidth: 30, textAlign: 'right' }}>
+                  {(() => {
+                    const [hi, mi] = o.ora_inizio.split(':').map(Number);
+                    const [hf, mf] = o.ora_fine.split(':').map(Number);
+                    const tot = Math.max(0, (hf * 60 + mf) - (hi * 60 + mi));
+                    return tot > 0 ? `${Math.floor(tot/60)}h${tot%60>0?tot%60+'m':''}` : '';
+                  })()}
+                </span>
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Riposo
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Bottone salva */}
+      <button
+        onClick={salva}
+        disabled={saving}
+        style={{
+          marginTop: 12, width: '100%', padding: '10px',
+          borderRadius: 12, border: 'none', cursor: saving ? 'wait' : 'pointer',
+          fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+          background: saved
+            ? 'rgba(5,150,105,0.12)'
+            : 'linear-gradient(145deg,#5aabff,#2060dd)',
+          color: saved ? '#059669' : '#fff',
+          transition: 'all 0.2s',
+          opacity: saving ? 0.7 : 1,
+        }}>
+        {saving ? 'Salvataggio...' : saved ? '✓ Orari salvati' : 'Salva orari'}
+      </button>
+    </div>
   );
 }
 

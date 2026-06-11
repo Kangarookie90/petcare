@@ -38,9 +38,12 @@ export default function DashboardOperatoreView({ role, session }) {
   const [opSel,         setOpSel]         = useState(null);
   const [appuntamenti,  setAppuntamenti]  = useState([]);
   const [loading,       setLoading]       = useState(false);
-  const [apInCorso,     setApInCorso]     = useState(null); // id ap attivo
-  const [tempoInCorso,  setTempoInCorso]  = useState(0);   // secondi
-  const [showDone,      setShowDone]      = useState(null); // id completato
+  const [apInCorso,     setApInCorso]     = useState(null);
+  const [tempoInCorso,  setTempoInCorso]  = useState(0);
+  const [showDone,      setShowDone]      = useState(null);
+  const [orari,         setOrari]         = useState([]);      // operatori_orari
+  const [apSettimana,   setApSettimana]   = useState([]);      // ap settimana corrente
+  const [apMese,        setApMese]        = useState([]);      // ap mese corrente
   const timerRef = useRef(null);
 
   // Carica operatori e, se non admin, auto-seleziona il proprio record
@@ -57,23 +60,66 @@ export default function DashboardOperatoreView({ role, session }) {
       });
   }, []);
 
-  // Carica appuntamenti del giorno per l'operatore selezionato
+  // Carica appuntamenti del giorno + orari + dati saturazione
   useEffect(() => {
     if (!opSel) return;
     setLoading(true);
-    const oggi = new Date();
-    const inizio = new Date(oggi.setHours(0,0,0,0)).toISOString();
-    const fine   = new Date(oggi.setHours(23,59,59,999)).toISOString();
-    supabase.from('appuntamenti')
-      .select(`id, inizio, fine, stato, note,
-        clienti(id, nome, cognome, telefono),
-        animali(id, nome, specie, zone_critiche, problemi_carattere, comportamento),
-        appuntamenti_servizi(servizi(nome))`)
-      .eq('operatore_id', opSel.id)
-      .gte('inizio', inizio)
-      .lte('inizio', fine)
-      .order('inizio')
-      .then(({ data }) => { setAppuntamenti(data || []); setLoading(false); });
+    const now    = new Date();
+
+    // Giorno
+    const inizioGiorno = new Date(now); inizioGiorno.setHours(0,0,0,0);
+    const fineGiorno   = new Date(now); fineGiorno.setHours(23,59,59,999);
+
+    // Settimana (Lun-Dom)
+    const dayOfWeek    = now.getDay() === 0 ? 6 : now.getDay() - 1; // 0=lun
+    const inizioSett   = new Date(now); inizioSett.setDate(now.getDate() - dayOfWeek); inizioSett.setHours(0,0,0,0);
+    const fineSett     = new Date(inizioSett); fineSett.setDate(inizioSett.getDate() + 6); fineSett.setHours(23,59,59,999);
+
+    // Mese
+    const inizioMese   = new Date(now.getFullYear(), now.getMonth(), 1);
+    const fineMese     = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    Promise.all([
+      // Appuntamenti oggi
+      supabase.from('appuntamenti')
+        .select(`id, inizio, fine, stato, note,
+          clienti(id, nome, cognome, telefono),
+          animali(id, nome, specie, zone_critiche, problemi_carattere, comportamento),
+          appuntamenti_servizi(servizi(nome))`)
+        .eq('operatore_id', opSel.id)
+        .gte('inizio', inizioGiorno.toISOString())
+        .lte('inizio', fineGiorno.toISOString())
+        .order('inizio'),
+
+      // Appuntamenti settimana (solo id+inizio+fine+stato per saturazione)
+      supabase.from('appuntamenti')
+        .select('id, inizio, fine, stato')
+        .eq('operatore_id', opSel.id)
+        .neq('stato', 'cancellato')
+        .gte('inizio', inizioSett.toISOString())
+        .lte('inizio', fineSett.toISOString()),
+
+      // Appuntamenti mese
+      supabase.from('appuntamenti')
+        .select('id, inizio, fine, stato')
+        .eq('operatore_id', opSel.id)
+        .neq('stato', 'cancellato')
+        .gte('inizio', inizioMese.toISOString())
+        .lte('inizio', fineMese.toISOString()),
+
+      // Orari lavorativi operatore
+      supabase.from('operatori_orari')
+        .select('*')
+        .eq('operatore_id', opSel.id)
+        .eq('attivo', true),
+
+    ]).then(([apOggi, apSett, apMeseRes, orariRes]) => {
+      setAppuntamenti(apOggi.data || []);
+      setApSettimana(apSett.data || []);
+      setApMese(apMeseRes.data || []);
+      setOrari(orariRes.data || []);
+      setLoading(false);
+    });
   }, [opSel]);
 
   // Timer per appuntamento in corso
@@ -184,6 +230,64 @@ export default function DashboardOperatoreView({ role, session }) {
   const progresso   = appuntamenti.length > 0
     ? Math.round((apCompletati.length / appuntamenti.length) * 100) : 0;
 
+  // ── Calcolo saturazione ─────────────────────────────────────
+  // Ore disponibili = somma ore lavorative per i giorni della settimana/mese con orari configurati
+  const minutiAp = (lista) => lista.reduce((tot, a) => {
+    const min = (new Date(a.fine) - new Date(a.inizio)) / 60000;
+    return tot + Math.max(0, min);
+  }, 0);
+
+  // Settimana corrente: calcola minuti disponibili per i giorni Lun-Dom di questa settimana
+  const now = new Date();
+  const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  const inizioSett = new Date(now); inizioSett.setDate(now.getDate() - dayOfWeek); inizioSett.setHours(0,0,0,0);
+  const minutiDisponibiliSett = Array.from({ length: 7 }, (_, i) => {
+    const giorno = new Date(inizioSett); giorno.setDate(inizioSett.getDate() + i);
+    const dow = giorno.getDay(); // 0=dom
+    const orarioGiorno = orari.find(o => o.giorno_settimana === dow);
+    if (!orarioGiorno) return 0;
+    const [hi, mi] = orarioGiorno.ora_inizio.slice(0,5).split(':').map(Number);
+    const [hf, mf] = orarioGiorno.ora_fine.slice(0,5).split(':').map(Number);
+    return Math.max(0, (hf * 60 + mf) - (hi * 60 + mi));
+  }).reduce((a, b) => a + b, 0);
+
+  // Mese corrente: somma minuti per tutti i giorni lavorativi del mese
+  const giorniDelMese = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const minutiDisponibiliMese = Array.from({ length: giorniDelMese }, (_, i) => {
+    const giorno = new Date(now.getFullYear(), now.getMonth(), i + 1);
+    const dow = giorno.getDay();
+    const orarioGiorno = orari.find(o => o.giorno_settimana === dow);
+    if (!orarioGiorno) return 0;
+    const [hi, mi] = orarioGiorno.ora_inizio.slice(0,5).split(':').map(Number);
+    const [hf, mf] = orarioGiorno.ora_fine.slice(0,5).split(':').map(Number);
+    return Math.max(0, (hf * 60 + mf) - (hi * 60 + mi));
+  }).reduce((a, b) => a + b, 0);
+
+  // Oggi: minuti disponibili
+  const orarioOggi = orari.find(o => o.giorno_settimana === now.getDay());
+  const minutiDisponibiliOggi = orarioOggi ? (() => {
+    const [hi, mi] = orarioOggi.ora_inizio.slice(0,5).split(':').map(Number);
+    const [hf, mf] = orarioOggi.ora_fine.slice(0,5).split(':').map(Number);
+    return Math.max(0, (hf * 60 + mf) - (hi * 60 + mi));
+  })() : 0;
+  const minutiImpegnatiOggi = minutiAp(appuntamenti.filter(a => a.stato !== 'cancellato'));
+
+  const satOggi = minutiDisponibiliOggi > 0
+    ? Math.min(100, Math.round(minutiImpegnatiOggi / minutiDisponibiliOggi * 100)) : 0;
+  const satSett = minutiDisponibiliSett > 0
+    ? Math.min(100, Math.round(minutiAp(apSettimana) / minutiDisponibiliSett * 100)) : 0;
+  const satMese = minutiDisponibiliMese > 0
+    ? Math.min(100, Math.round(minutiAp(apMese) / minutiDisponibiliMese * 100)) : 0;
+  const percOreOggi = minutiDisponibiliOggi > 0
+    ? Math.min(100, Math.round(minutiImpegnatiOggi / minutiDisponibiliOggi * 100)) : 0;
+
+  const fmtOreMin = (min) => min >= 60
+    ? `${Math.floor(min/60)}h${min%60>0?` ${min%60}m`:''}`
+    : `${min}m`;
+
+  const satColore = (pct) =>
+    pct >= 90 ? '#dc2626' : pct >= 70 ? '#d97706' : '#059669';
+
   return (
     <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
       style={{ padding:'0 0 2rem', width:'100%' }}>
@@ -241,6 +345,84 @@ export default function DashboardOperatoreView({ role, session }) {
           </div>
         )}
       </div>
+
+      {/* ── Riquadro saturazione ── */}
+      {orari.length > 0 && (
+        <motion.div initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }}
+          transition={{ delay:0.1 }}
+          style={{ ...glassCard, padding:'16px', marginBottom:16 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)',
+            textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:14 }}>
+            Saturazione
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'space-between' }}>
+            {[
+              { label:'Oggi',        pct: satOggi, sub: `${fmtOreMin(minutiImpegnatiOggi)} / ${fmtOreMin(minutiDisponibiliOggi)}` },
+              { label:'Settimana',   pct: satSett, sub: `${fmtOreMin(minutiAp(apSettimana))} / ${fmtOreMin(minutiDisponibiliSett)}` },
+              { label:'Mese',        pct: satMese, sub: `${fmtOreMin(minutiAp(apMese))} / ${fmtOreMin(minutiDisponibiliMese)}` },
+            ].map(({ label, pct, sub }) => {
+              const colore = satColore(pct);
+              const r = 28, stroke = 6;
+              const circ = 2 * Math.PI * r;
+              const dash = (pct / 100) * circ;
+              return (
+                <div key={label} style={{ flex:1, display:'flex', flexDirection:'column',
+                  alignItems:'center', gap:6 }}>
+                  {/* Ring SVG */}
+                  <div style={{ position:'relative', width:72, height:72 }}>
+                    <svg width={72} height={72} viewBox="0 0 72 72">
+                      {/* Track */}
+                      <circle cx={36} cy={36} r={r}
+                        fill="none"
+                        stroke="var(--card-border-sm)"
+                        strokeWidth={stroke}
+                      />
+                      {/* Progress */}
+                      <motion.circle
+                        cx={36} cy={36} r={r}
+                        fill="none"
+                        stroke={colore}
+                        strokeWidth={stroke}
+                        strokeLinecap="round"
+                        strokeDasharray={circ}
+                        initial={{ strokeDashoffset: circ }}
+                        animate={{ strokeDashoffset: circ - dash }}
+                        transition={{ duration: 0.8, ease: [0.22,1,0.36,1], delay: 0.2 }}
+                        transform="rotate(-90 36 36)"
+                      />
+                    </svg>
+                    {/* Percentuale centrale */}
+                    <div style={{ position:'absolute', inset:0,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      flexDirection:'column' }}>
+                      <span style={{ fontSize:15, fontWeight:800, color:colore,
+                        lineHeight:1, letterSpacing:'-0.5px' }}>
+                        {pct}%
+                      </span>
+                    </div>
+                  </div>
+                  {/* Label */}
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--text-secondary)',
+                    textAlign:'center' }}>
+                    {label}
+                  </div>
+                  {/* Ore impegnate / disponibili */}
+                  <div style={{ fontSize:10, color:'var(--text-muted)', textAlign:'center',
+                    lineHeight:1.4 }}>
+                    {sub}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {orari.length === 0 && (
+            <div style={{ fontSize:12, color:'var(--text-muted)', textAlign:'center',
+              padding:'8px 0' }}>
+              Configura gli orari in Impostazioni → Operatori per vedere la saturazione
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Timer appuntamento in corso */}
       <AnimatePresence>
