@@ -574,11 +574,17 @@ export default function StatisticheView({ role, session }) {
     ? operatori.find(op => op.email === session?.user?.email) ?? null
     : null;
 
+  // apMese: tutti gli appuntamenti del mese/anno selezionato
+  const apMese = appuntamenti.filter(a => {
+    const d = new Date(a.inizio);
+    return d.getMonth() === meseSel && d.getFullYear() === annoSel;
+  });
+
   // apMeseVis: per l'operatore mostra solo i propri appuntamenti del mese
   const apMeseVis = !isAdmin && opCorrente
     ? apMese.filter(a => a.operatori?.id === opCorrente.id)
     : apMese;
-    
+
   const oggi = new Date();
   const apOggi = appuntamenti.filter(a =>
     new Date(a.inizio).toDateString() === oggi.toDateString()
