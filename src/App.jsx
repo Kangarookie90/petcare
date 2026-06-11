@@ -14,7 +14,7 @@ const CalendarioView         = lazy(() => import('./CalendarioView'));
 const StatisticheView        = lazy(() => import('./StatisticheView'));
 const PrimanotaView          = lazy(() => import('./PrimanotaView'));
 const ProssimiView           = lazy(() => import('./ProssimiView'));
-const RicercaGlobale         = lazy(() => import('./RicercaGlobale'));
+import RicercaGlobale from './RicercaGlobale';
 const ImpostazioniView       = lazy(() => import('./ImpostazioniView'));
 const SocialView             = lazy(() => import('./SocialView'));
 const DashboardOperatoreView = lazy(() => import('./DashboardOperatoreView'));
@@ -1158,11 +1158,18 @@ export default function App() {
 
       {/* Ricerca globale overlay */}
       <AnimatePresence>
-        {showRicerca && <RicercaGlobale onClose={() => setShowRicerca(false)} onNavigate={(id, opts = {}) => {
-              if (opts.petId)      { setPendingPetId(opts.petId); }
-              if (opts.clienteId)  { setPendingClienteId(opts.clienteId); }
-              handleNav(id);
-            }} />}
+        {showRicerca && (
+          <Suspense fallback={null}>
+            <RicercaGlobale
+              onClose={() => setShowRicerca(false)}
+              onNavigate={(id, opts = {}) => {
+                if (opts.petId)     { setPendingPetId(opts.petId); }
+                if (opts.clienteId) { setPendingClienteId(opts.clienteId); }
+                handleNav(id);
+              }}
+            />
+          </Suspense>
+        )}
       </AnimatePresence>
 
       {/* ── Easter egg: Il cuore di Nemora ── */}
