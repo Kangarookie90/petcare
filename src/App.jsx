@@ -1,1030 +1,1256 @@
-/**
- * ClientiView.jsx
- * Lista clienti + scheda cliente + animali collegati
- * Collegato a Supabase: tabelle clienti, animali, razze, operatori
- */
-
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, lazy, Suspense } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
+import { APP_VERSION, BUILD_DATE } from './version';
+import { inizializzaSync } from './syncService';
+import LoginView from './LoginView';
+import OfflineIndicator from './OfflineIndicator';
+import BriefingMattutino from './BriefingMattutino';
 
-// ── Stili condivisi ───────────────────────────────────────────
-const glass = {
-  background: 'var(--card-bg)',
-  border: '1px solid rgba(255,255,255,0.8)',
-  borderRadius: 20,
-  boxShadow: 'var(--card-shadow)',
-};
-const glassCard = {
-  background: 'var(--card-bg-sm)',
-  border: '1px solid rgba(255,255,255,0.72)',
-  borderRadius: 16,
-  boxShadow: 'var(--card-shadow-sm)',
-};
-const inputStyle = {
-  width: '100%', background: 'var(--input-bg)',
-  border: '1px solid rgba(255,255,255,0.8)', borderRadius: 12,
-  padding: '10px 14px', fontSize: 14, color: 'var(--text-primary)',
-  fontFamily: 'inherit', outline: 'none',
-};
-const btnPrimary = {
-  background: 'linear-gradient(145deg,#5aabff,#2060dd)', color: '#fff',
-  border: 'none', borderRadius: 13, padding: '11px 18px',
-  fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-  boxShadow: '0 4px 14px rgba(50,100,220,0.35)',
-};
-const btnSecondary = {
-  background: 'var(--input-bg)', color: 'var(--text-secondary)',
-  border: '1px solid rgba(255,255,255,0.8)', borderRadius: 13,
-  padding: '11px 18px', fontSize: 14, fontWeight: 600,
-  cursor: 'pointer', fontFamily: 'inherit',
-};
-const btnGreen = {
-  background: 'linear-gradient(145deg,#34d399,#059669)', color: '#fff',
-  border: 'none', borderRadius: 13, padding: '11px 18px',
-  fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-  boxShadow: '0 4px 14px rgba(5,150,105,0.35)',
-};
-const secLabel = {
-  fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
-  letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8,
-};
-const specieEmoji = s => s === 'gatto' ? '🐈' : s === 'coniglio' ? '🐇' : '🐕';
+// ── Code splitting: carica ogni view solo quando viene visitata ──
+const PetView                = lazy(() => import('./PetView'));
+const ClientiView            = lazy(() => import('./ClientiView'));
+const CalendarioView         = lazy(() => import('./CalendarioView'));
+const StatisticheView        = lazy(() => import('./StatisticheView'));
+const PrimanotaView          = lazy(() => import('./PrimanotaView'));
+const ProssimiView           = lazy(() => import('./ProssimiView'));
+import RicercaGlobale from './RicercaGlobale';
+const ImpostazioniView       = lazy(() => import('./ImpostazioniView'));
+const SocialView             = lazy(() => import('./SocialView'));
+const DashboardOperatoreView = lazy(() => import('./DashboardOperatoreView'));
+const ListaAttesaView        = lazy(() => import('./ListaAttesaView'));
+import {
+  useNotifiche,
+  NotificaToast,
+  NotifichePanel,
+  CampanellaNotifiche,
+} from './NotifichePanel';
 
-// ─────────────────────────────────────────────────────────────
-// MODAL OVERLAY WRAPPER
-// ─────────────────────────────────────────────────────────────
-function ModalOverlay({ onClose, children, maxWidth = 520, zIndex = 200 }) {
+// ── Varianti animazione pagine ──────────────────────────────
+const pageVariants = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.18, ease: 'easeOut' } },
+  exit:    { opacity: 0, transition: { duration: 0.12, ease: 'easeIn' } },
+};
+
+// ── Varianti staggered list ─────────────────────────────────
+const listVariants = {
+  animate: { transition: { staggerChildren: 0.07 } },
+};
+const itemVariants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+};
+
+const NAV_ITEMS = [
+  {
+    id: "home",
+    label: "Home",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 10.5L12 4l8 6.5V20a1.5 1.5 0 01-1.5 1.5h-4V15h-5v6.5H5A1.5 1.5 0 014 20v-9.5z"/>
+      </svg>
+    ),
+  },
+  {
+    id: "calendario",
+    label: "Calendario",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="16" rx="3"/>
+        <path d="M16 3v4M8 3v4M3 11h18"/>
+        <path d="M8 15h2M8 18h2M13 15h3M13 18h3"/>
+      </svg>
+    ),
+  },
+  {
+    id: "prossimi",
+    label: "Prossimi",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 7.5V12l3 3"/>
+        <path d="M17.5 4.5l.5.5"/>
+      </svg>
+    ),
+  },
+  {
+    id: "clienti",
+    label: "Clienti",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8.5" cy="7" r="3.5"/>
+        <path d="M2 20v-1.5A4.5 4.5 0 016.5 14h4A4.5 4.5 0 0115 18.5V20"/>
+        <path d="M16 3.5a3.5 3.5 0 010 7"/>
+        <path d="M20 20v-1a3.5 3.5 0 00-3.5-3.5"/>
+      </svg>
+    ),
+  },
+  {
+    id: "pet",
+    label: "Pet",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <ellipse cx="9" cy="5" rx="2" ry="3"/>
+        <ellipse cx="15" cy="5" rx="2" ry="3"/>
+        <ellipse cx="5" cy="12" rx="2.5" ry="3"/>
+        <ellipse cx="19" cy="12" rx="2.5" ry="3"/>
+        <path d="M12 10c-4 0-6 2.5-6 5 0 3.5 3 5 6 5s6-1.5 6-5c0-2.5-2-5-6-5z"/>
+      </svg>
+    ),
+  },
+  {
+    id: "statistiche",
+    label: "Statistiche",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 20V14"/>
+        <path d="M9 20V9"/>
+        <path d="M14 20V12"/>
+        <path d="M19 20V5"/>
+        <path d="M4 11l5-5 5 4 5-5"/>
+      </svg>
+    ),
+  },
+  {
+    id: "primanota",
+    label: "Prima Nota",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2.5H6A1.5 1.5 0 004.5 4v16A1.5 1.5 0 006 21.5h12A1.5 1.5 0 0019.5 20V8L14 2.5z"/>
+        <path d="M14 2.5V8H19.5"/>
+        <path d="M12 13v4M10 15h4"/>
+      </svg>
+    ),
+  },
+  {
+    id: "impostazioni",
+    label: "Impostazioni",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </svg>
+    ),
+  },
+  {
+    id: "social",
+    label: "Social",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="18" cy="5" r="3"/>
+        <circle cx="6" cy="12" r="3"/>
+        <circle cx="18" cy="19" r="3"/>
+        <path d="M8.7 10.7l6.6-3.4M8.7 13.3l6.6 3.4"/>
+      </svg>
+    ),
+  },
+  {
+    id: "dashboard_op",
+    label: "Dashboard Op.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="9" rx="2"/>
+        <rect x="14" y="3" width="7" height="5" rx="2"/>
+        <rect x="14" y="12" width="7" height="9" rx="2"/>
+        <rect x="3" y="16" width="7" height="5" rx="2"/>
+      </svg>
+    ),
+  },
+  {
+    id: "lista_attesa",
+    label: "Lista Attesa",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+        <path d="M16 3.13a4 4 0 010 7.75"/>
+        <path d="M20 8h2M21 7v2"/>
+      </svg>
+    ),
+  },
+];
+
+
+
+function HomeView() {
+  const [dati, setDati] = useState({ operatori: [], appuntamenti: [], totaleOggi: 0, inAttesa: 0, totaleClienti: 0 });
+  const [loading, setLoading] = useState(true);
+  const [inattivi, setInattivi] = useState([]);
+  const [inativiPronti, setInativiPronti] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const oggi = new Date();
+      const inizioGiorno = new Date(oggi.setHours(0,0,0,0)).toISOString();
+      const fineGiorno   = new Date(oggi.setHours(23,59,59,999)).toISOString();
+
+      // ── Fase 1: 3 query veloci → render immediato ─────────────
+      const [opRes, apRes, clRes] = await Promise.all([
+        supabase.from("operatori").select("id,nome,cognome,colore").eq("attivo", true).order("nome"),
+        supabase.from("appuntamenti").select(`
+          id, inizio, fine, stato,
+          clienti(nome, cognome),
+          animali(nome, specie),
+          operatori(id, nome, colore),
+          appuntamenti_servizi(servizi(nome))
+        `).gte("inizio", inizioGiorno).lte("inizio", fineGiorno).order("inizio"),
+        supabase.from("clienti").select("id", { count: "exact", head: true }),
+      ]);
+
+      const ops = opRes.data || [];
+      const aps = apRes.data || [];
+      const maxAp = Math.max(...ops.map(op => aps.filter(a => a.operatori?.id === op.id).length), 1);
+
+      setDati({
+        operatori: ops.map(op => ({
+          ...op,
+          appuntamentiOggi: aps.filter(a => a.operatori?.id === op.id).length,
+          maxAp,
+        })),
+        appuntamenti: aps,
+        totaleOggi: aps.length,
+        inAttesa: aps.filter(a => a.stato === "in attesa").length,
+        totaleClienti: clRes.count || 0,
+      });
+      setLoading(false); // ← sblocca subito il render
+
+      // ── Fase 2: inattivi in background, non blocca la UI ──────
+      // Strategia: prendi gli appuntamenti COMPLETATI più recenti per cliente
+      // usando una finestra temporale ampia (18 mesi), poi filtra chi
+      // non ha appuntamenti negli ultimi 60 giorni.
+      // Limit 200 → dataset piccolo, query veloce.
+      const soglia60  = new Date(Date.now() -  60 * 24 * 60 * 60 * 1000).toISOString();
+      const soglia18m = new Date(Date.now() - 548 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: apRecentiData } = await supabase
+        .from("appuntamenti")
+        .select("id, inizio, cliente_id, clienti(id, nome, cognome, telefono), animali(nome)")
+        .eq("stato", "completato")
+        .gte("inizio", soglia18m)          // ultimi 18 mesi — finestra ragionevole
+        .order("inizio", { ascending: false })
+        .limit(200);                        // basta trovare l'ultimo per ogni cliente
+
+      // Tieni solo l'appuntamento più recente per ogni cliente
+      const ultimoPerCliente = {};
+      (apRecentiData || []).forEach(a => {
+        const cid = a.clienti?.id || a.cliente_id;
+        if (!cid) return;
+        if (!ultimoPerCliente[cid]) ultimoPerCliente[cid] = a; // già ordinato desc
+      });
+
+      // Inattivi = chi non compare tra i recenti degli ultimi 60gg
+      const listaInattivi = Object.values(ultimoPerCliente)
+        .filter(a => new Date(a.inizio) < new Date(soglia60))
+        .sort((a, b) => new Date(a.inizio) - new Date(b.inizio));
+      setInattivi(listaInattivi);
+      setInativiPronti(true);
+    };
+    load();
+  }, []);
+
+  const ora = new Date().getHours();
+  const saluto = ora < 12 ? "Buongiorno" : ora < 18 ? "Buon pomeriggio" : "Buonasera";
+  const oggi = new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  const specieEmoji = s => s === "gatto" ? "🐈" : "🐕";
+  const COLORI_STATI = { confermato: "#2563eb", "in attesa": "#d97706", completato: "#059669", cancellato: "#dc2626" };
+
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      style={{
-        position: 'fixed', inset: 0, zIndex,
-        background: 'rgba(10,24,64,0.4)',
-        WebkitBackdropFilter: 'blur(10px)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 20,
-        touchAction: 'pan-y',
-        overscrollBehavior: 'contain',
-      }}
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 12, scale: 0.98 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-        style={{
-          ...glass, padding: 24, width: '100%',
-          maxWidth, maxHeight: '90vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        {children}
+    <motion.div style={{ padding: "0 0 2rem", width: "100%" }}
+      variants={listVariants} initial="initial" animate="animate">
+
+      {/* Header */}
+      <motion.div variants={itemVariants} style={{ marginBottom: "1.5rem" }}>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 4px", textTransform: "capitalize", fontWeight: 500 }}>{oggi}</p>
+        <h1 style={{ fontSize: 30, fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.6px" }}>
+          {saluto}!
+        </h1>
       </motion.div>
+
+      {/* Briefing mattutino AI */}
+      <motion.div variants={itemVariants}>
+        <BriefingMattutino
+          appuntamenti={dati.appuntamenti}
+          inattivi={inattivi}
+          loading={loading}
+          inativiPronti={inativiPronti}
+        />
+      </motion.div>
+
+      {/* KPI cards */}
+      <motion.div variants={itemVariants} style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
+        {[
+          { value: loading ? "-" : dati.totaleOggi,    label: "appuntamenti",  sub: "oggi",       accent: "#2563eb", icon: "📅" },
+          { value: loading ? "-" : dati.inAttesa,      label: "in attesa",     sub: "da confermare", accent: "#d97706", icon: "⏳" },
+          { value: loading ? "-" : dati.totaleClienti, label: "clienti",       sub: "registrati", accent: "#059669", icon: "👤" },
+        ].map((s) => (
+          <motion.div key={s.label}
+            whileHover={{ y: -3 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+            style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: 20, padding: "16px 12px", textAlign: "center", boxShadow: "var(--card-shadow)", cursor: "default", position: "relative", overflow: "hidden" }}
+          >
+            {/* Background accent circle */}
+            <div style={{ position: "absolute", top: -14, right: -14, width: 60, height: 60, borderRadius: "50%", background: s.accent + "18" }} />
+            <div style={{ fontSize: 20, marginBottom: 6 }}>{s.icon}</div>
+            <p style={{ fontSize: 28, fontWeight: 800, color: s.accent, margin: 0, lineHeight: 1, letterSpacing: "-1px" }}>{s.value}</p>
+            <p style={{ fontSize: 11, color: "var(--text-primary)", margin: "4px 0 0", fontWeight: 600 }}>{s.label}</p>
+            <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "1px 0 0" }}>{s.sub}</p>
+          </motion.div>
+        ))}
+      </motion.div>
+
+      {/* Operatori */}
+      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.6px", textTransform: "uppercase" }}>
+        Operatori oggi
+      </motion.p>
+      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+        {loading ? (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "16px 0" }}>Caricamento...</div>
+        ) : dati.operatori.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "16px 0" }}>Nessun operatore attivo</div>
+        ) : dati.operatori.map((op) => {
+          const pct = op.maxAp > 0 ? (op.appuntamentiOggi / op.maxAp) * 100 : 0;
+          const colore = op.colore || "#2563eb";
+          return (
+            <motion.div key={op.id} variants={itemVariants}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "13px 15px", boxShadow: "var(--card-shadow-sm)" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                {/* Avatar */}
+                <div style={{ width: 38, height: 38, borderRadius: 12, background: colore, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: "#fff", flexShrink: 0, boxShadow: "0 3px 10px " + colore + "55" }}>
+                  {op.nome[0]}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>{op.nome} {op.cognome}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>
+                    {op.appuntamentiOggi} appuntament{op.appuntamentiOggi === 1 ? "o" : "i"} oggi
+                  </p>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: colore }}>
+                  {op.appuntamentiOggi}
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div style={{ height: 5, borderRadius: 99, background: colore + "20", overflow: "hidden" }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: pct + "%" }}
+                  transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+                  style={{ height: "100%", borderRadius: 99, background: colore, boxShadow: "0 0 6px " + colore + "80" }}
+                />
+              </div>
+            </motion.div>
+          );
+        })}
+      </motion.div>
+
+      {/* Appuntamenti di oggi */}
+      <motion.p variants={itemVariants} style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", margin: "0 2px 10px", letterSpacing: "0.6px", textTransform: "uppercase" }}>
+        Appuntamenti di oggi
+      </motion.p>
+      <motion.div variants={listVariants} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {loading ? (
+          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "16px 0" }}>Caricamento...</div>
+        ) : dati.appuntamenti.length === 0 ? (
+          <motion.div variants={itemVariants} style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "24px", textAlign: "center", boxShadow: "var(--card-shadow-sm)" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🌿</div>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Nessun appuntamento oggi</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-muted)" }}>Giornata libera!</p>
+          </motion.div>
+        ) : dati.appuntamenti.map((a, i) => {
+          const ora = new Date(a.inizio).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+          const oraFine = new Date(a.fine).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+          const colore = a.operatori?.colore || "#2563eb";
+          const statoColore = COLORI_STATI[a.stato] || "#2563eb";
+          return (
+            <motion.div key={a.id} variants={itemVariants}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              style={{ background: "var(--card-bg-sm)", border: "1px solid var(--card-border-sm)", borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--card-shadow-sm)" }}
+            >
+              {/* Ora */}
+              <div style={{ minWidth: 44, textAlign: "center", flexShrink: 0 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1 }}>{ora}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--text-muted)", lineHeight: 1 }}>{oraFine}</p>
+              </div>
+              {/* Barra colore operatore */}
+              <div style={{ width: 3, height: 40, borderRadius: 99, background: colore, flexShrink: 0 }} />
+              {/* Avatar animale */}
+              <div style={{ width: 36, height: 36, borderRadius: 12, background: colore + "18", border: "1px solid " + colore + "30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                {a.animali ? specieEmoji(a.animali.specie) : "🐾"}
+              </div>
+              {/* Info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {a.animali?.nome || "Animale"} — {(a.appuntamenti_servizi?.[0]?.servizi?.nome) || 'Servizio'}
+                </p>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {a.clienti ? a.clienti.cognome + " " + a.clienti.nome : ""}{a.operatori ? " · " + a.operatori.nome : ""}
+                </p>
+              </div>
+              {/* Badge stato */}
+              <div style={{ fontSize: 10, fontWeight: 700, background: statoColore + "18", color: statoColore, padding: "3px 9px", borderRadius: 20, flexShrink: 0, whiteSpace: "nowrap" }}>
+                {a.stato}
+              </div>
+            </motion.div>
+          );
+        })}
+      </motion.div>
+
+      {/* ── Clienti inattivi da >60 giorni ── */}
+      {inattivi.length > 0 && (
+        <motion.div variants={itemVariants} style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#d97706' }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+              Clienti inattivi — oltre 60 giorni
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(217,119,6,0.12)', color: '#d97706', padding: '2px 8px', borderRadius: 20 }}>
+              {inattivi.length}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {inattivi.map((a) => {
+              const giorni = Math.floor((Date.now() - new Date(a.inizio).getTime()) / (1000 * 60 * 60 * 24));
+              const tel = a.clienti?.telefono;
+              return (
+                <motion.div key={a.id}
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 16, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Avatar */}
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(217,119,6,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>
+                    🐾
+                  </div>
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
+                      {a.clienti?.nome} {a.clienti?.cognome}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {a.animali?.nome && <span>🐶 {a.animali.nome}</span>}
+                      <span>Ultimo: {new Date(a.inizio).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                  {/* Giorni + contatta */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: giorni > 120 ? '#dc2626' : '#d97706', background: giorni > 120 ? 'rgba(220,38,38,0.1)' : 'rgba(217,119,6,0.1)', padding: '2px 8px', borderRadius: 20 }}>
+                      {giorni}gg
+                    </span>
+                    {tel && (
+                      <a href={`tel:${tel}`}
+                        style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', background: 'rgba(37,99,235,0.08)', padding: '4px 10px', borderRadius: 10, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.12 1.18 2 2 0 012.11 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l.45-.45a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                        </svg>
+                        Chiama
+                      </a>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
     </motion.div>
   );
 }
 
-function ModalHeader({ title, onClose }) {
+function PlaceholderView({ title, description }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
-      <button onClick={onClose} style={{
-        background: 'var(--card-bg-sm)', border: '1px solid rgba(255,255,255,0.7)',
-        borderRadius: 10, width: 32, height: 32, cursor: 'pointer',
-        fontSize: 18, color: 'var(--text-secondary)', fontFamily: 'inherit',
-      }}>×</button>
-    </div>
+    <motion.div
+      variants={pageVariants} initial="initial" animate="animate" exit="exit"
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, textAlign: "center", padding: "2rem" }}
+    >
+      <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", margin: "0 0 10px" }}>{title}</h2>
+      <p style={{ fontSize: 15, color: "var(--text-secondary)", margin: 0, maxWidth: 280, lineHeight: 1.6 }}>{description}</p>
+    </motion.div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// MODAL AGGIUNGI ANIMALE (nested)
-// ─────────────────────────────────────────────────────────────
-function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClose, onSaved }) {
-  const [f, setF] = useState({
-    nome: '', specie: 'cane', razza_id: '', data_nascita: '',
-    colore: '', servizi_abituali: '', preferenze_proprietario: '',
-    problemi_salute: '', problemi_carattere: '', note: '',
-    operatore_preferito_id: '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-  const razzeFiltered = razze.filter(r => r.specie === f.specie);
+export default function App() {
+  const [active, setActive] = useState("home");
+  const [navHidden, setNavHidden] = useState(false);
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showRicerca,    setShowRicerca]    = useState(false);
+  const [pendingPetId,     setPendingPetId]     = useState(null);
+  const [pendingClienteId, setPendingClienteId] = useState(null);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [showEasterEgg,  setShowEasterEgg]  = useState(false);
+  const [session, setSession] = useState(undefined);
 
-  const save = async () => {
-    if (!f.nome.trim()) { setError("Inserisci il nome dell'animale"); return; }
-    setLoading(true); setError('');
-    const { data, error: err } = await supabase
-      .from('animali')
-      .insert([{
-        cliente_id: clienteId,
-        nome: f.nome.trim(),
-        specie: f.specie,
-        razza_id: f.razza_id || null,
-        data_nascita: f.data_nascita || null,
-        colore: f.colore.trim() || null,
-        servizi_abituali: f.servizi_abituali.trim() || null,
-        preferenze_proprietario: f.preferenze_proprietario.trim() || null,
-        problemi_salute: f.problemi_salute.trim() || null,
-        problemi_carattere: f.problemi_carattere.trim() || null,
-        note: f.note.trim() || null,
-        operatore_preferito_id: f.operatore_preferito_id || null,
-      }])
-      .select('*, razze(id,nome)')
-      .single();
-    setLoading(false);
-    if (err) { setError(err.message); return; }
-    onSaved(data);
-    onClose();
-  };
+  // ── Notifiche: DEVE stare qui, prima di qualsiasi return condizionale ──
+  const { notifiche, nonLette, nuovaToast, marcaLette } = useNotifiche();
 
-  return (
-    <ModalOverlay onClose={onClose} maxWidth={500} zIndex={300}>
-      <ModalHeader title={`🐾 Nuovo animale — ${clienteNome}`} onClose={onClose} />
-
-      {/* Nome */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>Nome animale *</div>
-        <input type="text" placeholder="Es. Rex, Luna..." value={f.nome}
-          onChange={e => set('nome', e.target.value)} style={inputStyle} autoFocus />
-      </div>
-
-      {/* Specie */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>Specie</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {['cane', 'gatto', 'altro'].map(s => (
-            <button key={s} onClick={() => { set('specie', s); set('razza_id', ''); }} style={{
-              flex: 1, padding: '9px', borderRadius: 12, cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-              border: '1px solid rgba(255,255,255,0.8)',
-              background: f.specie === s ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.3)',
-              color: f.specie === s ? 'var(--text-primary)' : 'var(--text-secondary)',
-              boxShadow: f.specie === s ? '0 2px 0 rgba(255,255,255,0.9) inset' : 'none',
-            }}>
-              {specieEmoji(s)} {s.charAt(0).toUpperCase() + s.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Razza */}
-      {razzeFiltered.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={secLabel}>Razza</div>
-          <select value={f.razza_id} onChange={e => set('razza_id', e.target.value)} style={inputStyle}>
-            <option value="">Seleziona razza...</option>
-            {razzeFiltered.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
-          </select>
-        </div>
-      )}
-
-      {/* Data nascita + Colore */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-        <div>
-          <div style={secLabel}>Data di nascita</div>
-          <input type="date" value={f.data_nascita} onChange={e => set('data_nascita', e.target.value)} style={inputStyle} />
-        </div>
-        <div>
-          <div style={secLabel}>Colore mantello</div>
-          <input type="text" placeholder="Es. nero, bianco..." value={f.colore}
-            onChange={e => set('colore', e.target.value)} style={inputStyle} />
-        </div>
-      </div>
-
-      {/* Operatore preferito */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>Operatore preferito</div>
-        <select value={f.operatore_preferito_id} onChange={e => set('operatore_preferito_id', e.target.value)} style={inputStyle}>
-          <option value="">Nessuna preferenza</option>
-          {operatori.map(o => <option key={o.id} value={o.id}>{o.nome} {o.cognome}</option>)}
-        </select>
-      </div>
-
-      {/* Servizi abituali */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>✂️ Servizi abituali</div>
-        <textarea rows={2} placeholder="Es. toeletta completa mensile, bagno ogni 2 settimane..."
-          value={f.servizi_abituali} onChange={e => set('servizi_abituali', e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical' }} />
-      </div>
-
-      {/* Preferenze */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>💬 Preferenze proprietario</div>
-        <textarea rows={2} placeholder="Es. asciugatura a bassa temperatura, no profumo..."
-          value={f.preferenze_proprietario} onChange={e => set('preferenze_proprietario', e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical' }} />
-      </div>
-
-      {/* Problemi salute */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>🏥 Problemi di salute</div>
-        <textarea rows={2} placeholder="Allergie, patologie, medicinali in corso..."
-          value={f.problemi_salute} onChange={e => set('problemi_salute', e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical' }} />
-      </div>
-
-      {/* Problemi carattere */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>🧠 Problemi caratteriali</div>
-        <textarea rows={2} placeholder="Es. agitato con altri cani, morde durante il taglio unghie..."
-          value={f.problemi_carattere} onChange={e => set('problemi_carattere', e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical' }} />
-      </div>
-
-      {/* Note */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={secLabel}>📝 Note aggiuntive</div>
-        <textarea rows={2} placeholder="Altre informazioni utili..."
-          value={f.note} onChange={e => set('note', e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical' }} />
-      </div>
-
-      {error && (
-        <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 12, padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>
-          {error}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={onClose} style={{ ...btnSecondary, flex: 1 }}>Annulla</button>
-        <button onClick={save} disabled={loading} style={{ ...btnGreen, flex: 2, opacity: loading ? 0.7 : 1 }}>
-          {loading ? 'Salvataggio...' : '🐾 Aggiungi animale'}
-        </button>
-      </div>
-    </ModalOverlay>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// MODAL AGGIUNGI CLIENTE
-// ─────────────────────────────────────────────────────────────
-function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
-  const [f, setF] = useState({
-    nome: '', cognome: '', telefono: '', email: '', indirizzo: '', note: '', prezzo_riservato: '',
-  });
-  const [animali, setAnimali] = useState([]);      // animali da aggiungere
-  const [showPet, setShowPet] = useState(false);   // mostra modal animale nested
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-
-  // Aggiunta animale temporanea (prima del salvataggio del cliente)
-  const handlePetSaved = (pet) => {
-    setAnimali(prev => [...prev, pet]);
-  };
-
-  const save = async () => {
-    if (!f.nome.trim()) { setError('Inserisci il nome'); return; }
-    setLoading(true); setError('');
-
-    // 1. Salva il cliente
-    const { data: cliente, error: errC } = await supabase
-      .from('clienti')
-      .insert([{
-        nome: f.nome.trim(),
-        cognome: f.cognome.trim(),
-        telefono: f.telefono.trim() || null,
-        email: f.email.trim() || null,
-        indirizzo: f.indirizzo.trim() || null,
-        note: f.note.trim() || null,
-        prezzo_riservato: f.prezzo_riservato !== '' ? Number(f.prezzo_riservato) : null,
-      }])
-      .select()
-      .single();
-
-    if (errC) { setLoading(false); setError(errC.message); return; }
-
-    // 2. Se ci sono animali da aggiungere, li salva con il cliente_id appena creato
-    if (animali.length > 0) {
-      const animaliDaSalvare = animali.map(a => ({
-        ...a,
-        id: undefined,           // rimuovi id temporaneo
-        cliente_id: cliente.id,  // assegna il vero cliente_id
-        razze: undefined,        // rimuovi join data
-      }));
-      await supabase.from('animali').insert(animaliDaSalvare);
-    }
-
-    setLoading(false);
-    onSaved({ ...cliente, animali_count: animali.length });
-    onClose();
-  };
-
-  return (
-    <ModalOverlay onClose={onClose} maxWidth={540} zIndex={200}>
-      <ModalHeader title="👤 Nuovo cliente" onClose={onClose} />
-
-      {/* Nome + Cognome */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-        <div>
-          <div style={secLabel}>Nome *</div>
-          <input type="text" placeholder="Mario" value={f.nome}
-            onChange={e => set('nome', e.target.value)} style={inputStyle} autoFocus />
-        </div>
-        <div>
-          <div style={secLabel}>Cognome</div>
-          <input type="text" placeholder="Rossi" value={f.cognome}
-            onChange={e => set('cognome', e.target.value)} style={inputStyle} />
-        </div>
-      </div>
-
-      {/* Telefono + Email */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-        <div>
-          <div style={secLabel}>📱 Telefono</div>
-          <input type="tel" placeholder="+39 333 1234567" value={f.telefono}
-            onChange={e => set('telefono', e.target.value)} style={inputStyle} />
-        </div>
-        <div>
-          <div style={secLabel}>📧 Email</div>
-          <input type="email" placeholder="mario@email.com" value={f.email}
-            onChange={e => set('email', e.target.value)} style={inputStyle} />
-        </div>
-      </div>
-
-      {/* Indirizzo */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>📍 Indirizzo</div>
-        <input type="text" placeholder="Via Roma 1, Milano" value={f.indirizzo}
-          onChange={e => set('indirizzo', e.target.value)} style={inputStyle} />
-      </div>
-
-      {/* Note */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={secLabel}>📝 Note</div>
-        <textarea rows={2} placeholder="Note sul cliente..."
-          value={f.note} onChange={e => set('note', e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical' }} />
-      </div>
-
-      {/* Sezione animali già aggiunti */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={secLabel}>🐾 Animali ({animali.length})</div>
-          <button onClick={() => setShowPet(true)} style={{
-            ...btnGreen, padding: '7px 14px', fontSize: 12,
-          }}>
-            + Aggiungi pet
-          </button>
-        </div>
-
-        {animali.length === 0 ? (
-          <div style={{ ...glassCard, padding: '14px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              Nessun animale aggiunto — puoi aggiungerli anche dopo
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {animali.map((a, i) => (
-              <div key={i} style={{ ...glassCard, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px' }}>
-                <span style={{ fontSize: 20 }}>{specieEmoji(a.specie)}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{a.nome}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-                    {a.razze?.nome || a.specie}
-                    {a.colore && ` - ${a.colore}`}
-                  </div>
-                </div>
-                <button onClick={() => setAnimali(prev => prev.filter((_, idx) => idx !== i))}
-                  style={{ background: 'rgba(239,68,68,0.1)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', fontSize: 12, color: '#dc2626', fontFamily: 'inherit' }}>
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {error && (
-        <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 12, padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>
-          {error}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={onClose} style={{ ...btnSecondary, flex: 1 }}>Annulla</button>
-        <button onClick={save} disabled={loading} style={{ ...btnPrimary, flex: 2, opacity: loading ? 0.7 : 1 }}>
-          {loading ? 'Salvataggio...' : `✓ Salva cliente${animali.length > 0 ? ` + ${animali.length} pet` : ''}`}
-        </button>
-      </div>
-
-      {/* Modal animale nested */}
-      {showPet && (
-        <ModalAggiungiAnimale
-          clienteId={null}
-          clienteNome={`${f.nome} ${f.cognome}`.trim() || 'nuovo cliente'}
-          razze={razze}
-          operatori={operatori}
-          onClose={() => setShowPet(false)}
-          onSaved={(pet) => { handlePetSaved(pet); setShowPet(false); }}
-        />
-      )}
-    </ModalOverlay>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// SCHEDA CLIENTE
-// ─────────────────────────────────────────────────────────────
-function SchedaCliente({ cliente, razze, operatori, onUpdate, onBack, onNavigateToPet, onDelete }) {
-  const [animali, setAnimali] = useState([]);
-  const [loadingAnimali, setLoadingAnimali] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [editVal, setEditVal] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [showAddPet, setShowAddPet] = useState(false);
-
-  // ── Modifica scheda completa ──
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({
-    nome:             cliente.nome             || '',
-    cognome:          cliente.cognome          || '',
-    telefono:         cliente.telefono         || '',
-    email:            cliente.email            || '',
-    indirizzo:        cliente.indirizzo        || '',
-    note:             cliente.note             || '',
-    prezzo_riservato: cliente.prezzo_riservato || '',
-  });
-  const [savingEdit,  setSavingEdit]  = useState(false);
-  const [editError,   setEditError]   = useState('');
-
-  // ── Elimina cliente ──
-  const [deleting, setDeleting] = useState(false);
-
-  const openEditModal = () => {
-    setEditForm({
-      nome:             cliente.nome             || '',
-      cognome:          cliente.cognome          || '',
-      telefono:         cliente.telefono         || '',
-      email:            cliente.email            || '',
-      indirizzo:        cliente.indirizzo        || '',
-      note:             cliente.note             || '',
-      prezzo_riservato: cliente.prezzo_riservato || '',
+  // ── Auth: carica sessione iniziale e ascolta cambiamenti ──
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session ?? null);
     });
-    setEditError('');
-    setShowEditModal(true);
-  };
 
-  const saveEditForm = async () => {
-    if (!editForm.nome.trim()) {
-      setEditError('Il nome è obbligatorio'); return;
-    }
-    setSavingEdit(true); setEditError('');
-    const updates = {
-      nome:             editForm.nome.trim(),
-      cognome:          editForm.cognome.trim(),
-      telefono:         editForm.telefono.trim()  || null,
-      email:            editForm.email.trim()     || null,
-      indirizzo:        editForm.indirizzo.trim() || null,
-      note:             editForm.note.trim()      || null,
-      prezzo_riservato: editForm.prezzo_riservato !== '' ? Number(editForm.prezzo_riservato) : null,
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Sync: avvia sincronizzazione DB locale al login ──────
+  useEffect(() => {
+    if (session) inizializzaSync();
+  }, [session]);
+
+  // Cmd+K / Ctrl+K apre la ricerca globale
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowRicerca(v => !v);
+      }
     };
-    const { error } = await supabase.from('clienti').update(updates).eq('id', cliente.id);
-    setSavingEdit(false);
-    if (error) { setEditError(error.message); return; }
-    onUpdate({ ...cliente, ...updates });
-    setShowEditModal(false);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Forza resize su FullCalendar dopo la transizione sidebar (310ms = durata CSS)
+  useEffect(() => {
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 310);
+    return () => clearTimeout(t);
+  }, [sidebarCollapsed]);
+
+  // Loading iniziale mentre Supabase verifica la sessione
+  if (session === undefined) {
+    return (
+      <>
+        <div className="app-bg" />
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(37,99,235,0.6)" strokeWidth="2.5" strokeLinecap="round"
+            style={{ animation: 'spin 0.8s linear infinite' }}>
+            <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3"/>
+            <path d="M21 12a9 9 0 00-9-9"/>
+          </svg>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </>
+    );
+  }
+
+  // Non autenticato → mostra login
+  if (!session) {
+    return (
+      <>
+        <div className="app-bg" />
+        <LoginView />
+      </>
+    );
+  }
+
+  // ── Ruolo utente — default a 'operatore' se non impostato (sicuro by default) ──
+  const role    = session?.user?.user_metadata?.role ?? 'operatore';
+  const isAdmin = role === 'admin';
+
+  // ── Viste accessibili per ruolo ──────────────────────────────
+  const VISTE_ADMIN_ONLY = ['social'];
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
-  const handleDelete = async () => {
-    // Avviso se il cliente ha animali
-    if (animali.length > 0) {
-      const ok = window.confirm(
-        `Attenzione: questo cliente ha ${animali.length} animale/i registrato/i.\n` +
-        `Eliminando il cliente verranno eliminati anche tutti i suoi animali e i relativi appuntamenti.\n\n` +
-        `Sei sicuro di voler procedere?`
-      );
-      if (!ok) return;
-    } else {
-      const ok = window.confirm(`Eliminare definitivamente ${cliente.cognome} ${cliente.nome}?\nL'operazione non è reversibile.`);
-      if (!ok) return;
+  const handleNav = (id) => {
+    // Blocca navigazione a viste non consentite
+    if (VISTE_ADMIN_ONLY.includes(id) && !isAdmin) return;
+    setActive(id);
+  };
+
+  // Se l'utente è su una vista non consentita (es. dopo downgrade ruolo) → redirect home
+  if (VISTE_ADMIN_ONLY.includes(active) && !isAdmin) {
+    setActive('home');
+  }
+
+  const renderView = () => {
+    switch (active) {
+      case "home":       return <HomeView key="home" />;
+      case "calendario": return <CalendarioView />;
+      case "prossimi":   return <ProssimiView key="prossimi" />;
+      case "clienti":    return <ClientiView key="clienti" initialClienteId={pendingClienteId} onClienteOpened={() => setPendingClienteId(null)} onNavigateToPet={(id) => { setPendingPetId(id); setActive('pet'); }} />;
+      case "pet":        return <PetView key="pet" initialPetId={pendingPetId} onPetOpened={() => setPendingPetId(null)} />;
+      case "impostazioni": return <ImpostazioniView key="impostazioni" role={role} />;
+      case "statistiche":  return <StatisticheView key="statistiche" role={role} />;
+      case "primanota":    return <PrimanotaView key="primanota" />;
+      case "social":       return isAdmin ? <SocialView key="social" /> : null;
+      case "dashboard_op": return <DashboardOperatoreView key="dashboard_op" role={role} session={session} />;
+      case "lista_attesa": return <ListaAttesaView key="lista_attesa" onNavigateToCalendario={() => setActive('calendario')} />;
+      default:           return null;
     }
-    setDeleting(true);
-    await supabase.from('clienti').delete().eq('id', cliente.id);
-    setDeleting(false);
-    onDelete(cliente.id);
   };
-
-  useEffect(() => { fetchAnimali(); }, [cliente.id]);
-
-  const fetchAnimali = async () => {
-    setLoadingAnimali(true);
-    const { data } = await supabase
-      .from('animali')
-      .select('*, razze(id,nome)')
-      .eq('cliente_id', cliente.id)
-      .order('nome');
-    setAnimali(data || []);
-    setLoadingAnimali(false);
-  };
-
-  const saveField = async () => {
-    setSaving(true);
-    const { error } = await supabase.from('clienti').update({ [editing]: editVal }).eq('id', cliente.id);
-    setSaving(false);
-    if (!error) { onUpdate({ ...cliente, [editing]: editVal }); setEditing(null); }
-  };
-
-  const handlePetAdded = (pet) => {
-    setAnimali(prev => [...prev, pet].sort((a, b) => a.nome.localeCompare(b.nome)));
-  };
-
-  const CAMPI = [
-    { field: 'telefono',  label: '📱 Telefono', type: 'tel' },
-    { field: 'email',     label: '📧 Email',     type: 'email' },
-    { field: 'indirizzo', label: '📍 Indirizzo', type: 'text' },
-    { field: 'note',      label: '📝 Note',      type: 'textarea' },
-    { field: 'prezzo_riservato', label: '💰 Prezzo riservato', type: 'number' },
-  ];
 
   return (
-    <div style={{ width: '100%' }}>
-      {/* Back + Azioni */}
-      <div style={{ marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button onClick={onBack} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>← Indietro</button>
-        <button onClick={openEditModal} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-          ✏️ Modifica scheda
-        </button>
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          style={{
-            padding: '8px 14px', fontSize: 13, borderRadius: 13, cursor: 'pointer', fontFamily: 'inherit',
-            border: '1px solid rgba(220,38,38,0.35)', background: 'rgba(220,38,38,0.07)',
-            color: '#dc2626', fontWeight: 600, opacity: deleting ? 0.6 : 1,
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-          🗑️ {deleting ? 'Eliminazione...' : 'Elimina cliente'}
-        </button>
-      </div>
+    <>
+      <style>{`
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
-      {/* Header cliente */}
-      <div style={{ ...glass, padding: '18px 20px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: '50%',
-          background: 'linear-gradient(145deg,#5aabff,#2060dd)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 22, fontWeight: 700, color: '#fff', flexShrink: 0,
-          boxShadow: '0 4px 14px rgba(50,100,220,0.35)',
-        }}>
-          {cliente.cognome?.[0]}{cliente.nome?.[0]}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.4px' }}>
-            {cliente.cognome} {cliente.nome}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, display: 'flex', gap: 12 }}>
-            {cliente.telefono && <span>📱 {cliente.telefono}</span>}
-            {cliente.email && <span>📧 {cliente.email}</span>}
-          </div>
-        </div>
-        <div style={{ fontSize: 12, fontWeight: 600, background: 'rgba(16,185,129,0.12)', color: '#059669', padding: '4px 10px', borderRadius: 20 }}>
-          {animali.length} pet
-        </div>
-      </div>
+        /* ── LIGHT MODE ── */
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          min-height: 100vh;
+          overflow-x: hidden;
+          background: #dde8f8;
+        }
+        .app-bg {
+          position: fixed; inset: 0; z-index: 0;
+          background:
+            radial-gradient(ellipse 55% 45% at 15% 15%, rgba(160,200,255,0.9) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 55% at 85% 10%, rgba(190,220,255,0.75) 0%, transparent 55%),
+            radial-gradient(ellipse 65% 50% at 55% 85%, rgba(150,195,250,0.65) 0%, transparent 60%),
+            linear-gradient(145deg, #bdd6ff 0%, #d4e6ff 40%, #a8c8ff 100%);
+        }
+        .sidebar {
+          background: rgba(200,220,255,0.5);
+          border-right: 1px solid rgba(255,255,255,0.75);
+          box-shadow: 2px 0 24px rgba(80,120,200,0.1);
+        }
+        @supports not (backdrop-filter: blur(1px)) {
+          .sidebar { background: rgba(200,220,255,0.95); }
+          .bottom-nav { background: rgba(210,228,255,0.97); }
+        }
+        .sidebar-logo { color: #081840; }
+        .sidebar-item { color: rgba(20,50,120,0.5); }
+        .sidebar-item:hover { background: rgba(255,255,255,0.4); color: rgba(15,40,110,0.85); }
+        .sidebar-item.active {
+          background: rgba(255,255,255,0.65);
+          border: 1px solid rgba(255,255,255,0.85);
+          color: #0f2050;
+          box-shadow: 0 2px 0 rgba(255,255,255,0.92) inset, 0 4px 16px rgba(60,100,200,0.15);
+        }
+        .bottom-nav {
+          background: rgba(210,228,255,0.62);
+          border: 1px solid rgba(255,255,255,0.82);
+          box-shadow: 0 2px 0 rgba(255,255,255,0.95) inset, 0 16px 48px rgba(60,100,200,0.22);
+        }
+        .nav-item { color: rgba(20,60,140,0.55); }
+        .nav-item.active {
+          background: rgba(255,255,255,0.65);
+          color: #0a1e5e;
+          box-shadow: 0 2px 0 rgba(255,255,255,0.95) inset;
+        }
 
-      {/* Dati cliente */}
-      <div style={{ ...glass, padding: '16px 18px', marginBottom: 14 }}>
-        <div style={{ ...secLabel, marginBottom: 14 }}>Dati cliente</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {CAMPI.map(({ field, label, type }) => (
-            <div key={field}>
-              {editing === field ? (
-                <div>
-                  <div style={{ ...secLabel, marginBottom: 6 }}>{label}</div>
-                  {type === 'textarea' ? (
-                    <textarea autoFocus rows={3} value={editVal} onChange={e => setEditVal(e.target.value)}
-                      style={{ ...inputStyle, resize: 'vertical' }} />
-                  ) : type === 'number' ? (
-                    <div style={{ position: 'relative' }}>
-                      <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
-                      <input type="number" min="0" step="0.50" autoFocus value={editVal} onChange={e => setEditVal(e.target.value)} style={{ ...inputStyle, paddingLeft: 26 }} />
-                    </div>
-                  ) : (
-                    <input type={type} autoFocus value={editVal} onChange={e => setEditVal(e.target.value)} style={inputStyle} />
-                  )}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button onClick={saveField} disabled={saving} style={{ ...btnPrimary, flex: 1, padding: '8px', fontSize: 13, opacity: saving ? 0.7 : 1 }}>
-                      {saving ? 'Salvo...' : 'Salva'}
-                    </button>
-                    <button onClick={() => setEditing(null)} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>Annulla</button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
-                  borderBottom: '1px solid rgba(255,255,255,0.4)' }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 100 }}>{label}</div>
-                  <div style={{ flex: 1, fontSize: 14, color: cliente[field] ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: field === 'prezzo_riservato' && cliente[field] ? 700 : 400 }}>
-                    {field === 'prezzo_riservato'
-                      ? (cliente[field] ? `€ ${Number(cliente[field]).toFixed(2)}` : '— Prezzo standard')
-                      : (cliente[field] || '—')}
-                  </div>
-                  <button onClick={() => { setEditing(field); setEditVal(cliente[field] || ''); }} style={{
-                    fontSize: 11, fontWeight: 600, background: 'rgba(59,130,246,0.1)', color: '#2563eb',
-                    border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit',
-                  }}>
-                    Modifica
-                  </button>
-                </div>
-              )}
+        /* ── DARK MODE ── */
+        @media (prefers-color-scheme: dark) {
+          body { background: #0c1628; }
+          .app-bg {
+            background:
+              radial-gradient(ellipse 55% 45% at 15% 15%, rgba(30,70,160,0.7) 0%, transparent 60%),
+              radial-gradient(ellipse 50% 55% at 85% 10%, rgba(20,55,140,0.5) 0%, transparent 55%),
+              radial-gradient(ellipse 65% 50% at 55% 85%, rgba(15,50,130,0.55) 0%, transparent 60%),
+              linear-gradient(145deg, #0c1628 0%, #111e3a 40%, #0a1422 100%);
+          }
+          .sidebar {
+            background: rgba(15,32,75,0.65);
+            border-right: 1px solid rgba(100,150,255,0.15);
+          }
+          .sidebar-logo { color: #ddeeff; }
+          .sidebar-item { color: rgba(180,210,255,0.45); }
+          .sidebar-item:hover { background: rgba(80,120,220,0.15); color: rgba(200,225,255,0.8); }
+          .sidebar-item.active {
+            background: rgba(60,100,220,0.25);
+            border: 1px solid rgba(100,150,255,0.3);
+            color: #c8deff;
+            box-shadow: 0 1px 0 rgba(120,170,255,0.12) inset;
+          }
+          .bottom-nav {
+            background: rgba(20,40,90,0.6);
+            border: 1px solid rgba(100,150,255,0.2);
+            box-shadow: 0 1px 0 rgba(120,170,255,0.15) inset, 0 16px 48px rgba(0,0,0,0.45);
+          }
+          .nav-item { color: rgba(160,200,255,0.45); }
+          .nav-item.active {
+            background: rgba(60,100,220,0.3);
+            color: #c8e0ff;
+            box-shadow: 0 1px 0 rgba(120,170,255,0.15) inset;
+          }
+        }
+
+        /* ── LAYOUT ── */
+        .app-layout {
+          display: flex;
+          min-height: 100vh;
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          max-width: 100%;
+          overflow-x: hidden;
+        }
+        .sidebar {
+          display: none;
+          width: 240px;
+          flex-shrink: 0;
+          position: fixed;
+          top: 0; left: 0;
+          height: 100vh;
+          padding: 28px 14px 24px;
+          flex-direction: column;
+          gap: 4px;
+          z-index: 20;
+          backdrop-filter: blur(40px) saturate(1.8);
+          -webkit-backdrop-filter: blur(40px) saturate(1.8);
+          transition: width 0.3s cubic-bezier(0.4,0,0.2,1), padding 0.3s cubic-bezier(0.4,0,0.2,1);
+          overflow: hidden;
+        }
+        .sidebar.collapsed {
+          width: 68px;
+          padding: 28px 10px 24px;
+        }
+        .sidebar.collapsed .sidebar-label { display: none; }
+        .sidebar.collapsed .sidebar-logo span { display: none; }
+        .sidebar.collapsed .sidebar-item { justify-content: center; gap: 0; padding: 13px 0; }
+        .sidebar-toggle-btn {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 9px 14px;
+          border-radius: 99px;
+          cursor: pointer;
+          border: 1px solid rgba(255,255,255,0.82);
+          background: rgba(255,255,255,0.52);
+          backdrop-filter: blur(20px) saturate(1.8);
+          -webkit-backdrop-filter: blur(20px) saturate(1.8);
+          width: 100%;
+          font-size: 13px;
+          font-weight: 600;
+          text-align: left;
+          transition: all 0.2s;
+          font-family: inherit;
+          color: rgba(20,50,120,0.75);
+          white-space: nowrap;
+          overflow: hidden;
+          margin-top: 6px;
+          box-shadow: 0 2px 0 rgba(255,255,255,0.9) inset, 0 4px 14px rgba(60,100,200,0.12);
+        }
+        .sidebar-toggle-btn:hover {
+          background: rgba(255,255,255,0.68);
+          box-shadow: 0 2px 0 rgba(255,255,255,0.95) inset, 0 6px 20px rgba(60,100,200,0.18);
+          border-color: rgba(255,255,255,0.95);
+        }
+        .sidebar-toggle-btn:active { transform: scale(0.97); }
+        .sidebar-toggle-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .sidebar.collapsed .sidebar-toggle-btn {
+          justify-content: center;
+          gap: 0;
+          padding: 9px 0;
+          border-radius: 14px;
+        }
+        @media (prefers-color-scheme: dark) {
+          .sidebar-toggle-btn {
+            border: 1px solid rgba(100,150,255,0.28);
+            background: rgba(60,100,220,0.18);
+            color: rgba(180,210,255,0.8);
+            box-shadow: 0 1px 0 rgba(120,170,255,0.15) inset, 0 4px 14px rgba(0,0,0,0.2);
+          }
+          .sidebar-toggle-btn:hover {
+            background: rgba(60,100,220,0.28);
+            border-color: rgba(100,150,255,0.45);
+            box-shadow: 0 1px 0 rgba(120,170,255,0.2) inset, 0 6px 20px rgba(0,0,0,0.3);
+          }
+        }
+        .sidebar-logo {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 10px 26px;
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: -0.3px;
+        }
+        .logo-icon {
+          width: 38px; height: 38px;
+          flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .sidebar-item {
+          display: flex;
+          align-items: center;
+          gap: 13px;
+          padding: 13px 14px;
+          border-radius: 14px;
+          cursor: pointer;
+          border: 1px solid transparent;
+          background: transparent;
+          width: 100%;
+          font-size: 16px;
+          font-weight: 500;
+          text-align: left;
+          transition: all 0.2s;
+          font-family: inherit;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .sidebar-item svg { width: 22px; height: 22px; flex-shrink: 0; }
+        .main {
+          flex: 1;
+          padding: 28px 22px 110px;
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          transition: padding-bottom 0.3s ease;
+        }
+        .main.nav-hidden {
+          padding-bottom: 28px;
+        }
+        .bottom-nav {
+          position: fixed;
+          bottom: 20px;
+          left: 16px;
+          right: 16px;
+          transform: none;
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          border-radius: 26px;
+          z-index: 100;
+          width: auto;
+          max-width: 420px;
+          margin: 0 auto;
+          backdrop-filter: blur(40px) saturate(2);
+          -webkit-backdrop-filter: blur(40px) saturate(2);
+          overflow: hidden;
+        }
+        .bottom-nav-row {
+          display: flex;
+          gap: 2px;
+          padding: 8px 10px;
+        }
+        .bottom-nav-drawer {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 2px;
+          padding: 4px 10px 10px;
+          border-top: 1px solid rgba(255,255,255,0.15);
+        }
+        .nav-item {
+          flex: 1;
+          min-width: 52px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 3px;
+          padding: 8px 4px;
+          border-radius: 17px;
+          cursor: pointer;
+          border: none;
+          background: transparent;
+          transition: all 0.2s;
+          font-family: inherit;
+        }
+        .nav-item svg { width: 22px; height: 22px; }
+        .nav-item span { font-size: 10px; font-weight: 600; letter-spacing: 0.1px; }
+        @media (min-width: 640px) {
+          .sidebar { display: flex; padding-top: max(28px, calc(20px + env(safe-area-inset-top))); }
+          .bottom-nav { display: none; }
+          .nav-toggle { display: none !important; }
+          .main { margin-left: 240px; padding: max(32px, calc(20px + env(safe-area-inset-top))) 36px 36px; transition: margin-left 0.3s cubic-bezier(0.4,0,0.2,1); }
+          .main.sidebar-collapsed { margin-left: 68px; }
+          .main.nav-hidden { padding: max(32px, calc(20px + env(safe-area-inset-top))) 36px 36px; }
+        }
+
+        /* ── View Transitions — definiti in index.css ── */
+      `}</style>
+
+      <div className="app-bg" />
+
+      <div className="app-layout">
+        {/* Sidebar */}
+        <nav className={"sidebar" + (sidebarCollapsed ? " collapsed" : "")}>
+          <div className="sidebar-logo" onClick={() => setShowEasterEgg(true)}
+            style={{ cursor: 'pointer' }} title="Il cuore di Nemora">
+            <div className="logo-icon">
+              <img src="/assets/nemora-icon-1024.svg" alt="Nemora" style={{ width: 38, height: 38, borderRadius: 10 }} />
             </div>
+            <span>Nemora</span>
+          </div>
+          {NAV_ITEMS.filter(item => !(VISTE_ADMIN_ONLY.includes(item.id) && !isAdmin)).map((item) => (
+            <motion.button
+              key={item.id}
+              className={"sidebar-item" + (active === item.id ? " active" : "")}
+              onClick={() => handleNav(item.id)}
+              whileHover={{ x: sidebarCollapsed ? 0 : 3 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              title={sidebarCollapsed ? item.label : undefined}
+            >
+              {item.icon}
+              <span className="sidebar-label">{item.label}</span>
+            </motion.button>
           ))}
-        </div>
-      </div>
 
-      {/* Animali del cliente */}
-      <div style={{ ...glass, padding: '16px 18px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div style={secLabel}>🐾 Animali ({animali.length})</div>
-          <button onClick={() => setShowAddPet(true)} style={{ ...btnGreen, padding: '7px 14px', fontSize: 12 }}>
-            + Aggiungi pet
+          {/* Bottone ricerca globale */}
+          <button
+            className="sidebar-item"
+            onClick={() => setShowRicerca(true)}
+            title={sidebarCollapsed ? "Cerca (⌘K)" : undefined}
+            style={{ color: 'rgba(20,50,120,0.55)', marginTop: 4 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 22, height: 22, flexShrink: 0 }}>
+              <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <span className="sidebar-label">Cerca <span style={{fontSize:11,opacity:0.5,fontWeight:400}}>⌘K</span></span>
           </button>
-        </div>
 
-        {loadingAnimali ? (
-          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)', fontSize: 14 }}>
-            Caricamento...
+          {/* Spacer + Notifiche + Profilo + Logout */}
+          <div style={{ flex: 1 }} />
+
+          {/* Campanella notifiche WhatsApp */}
+          <div style={{ display: 'flex', alignItems: 'center',
+            padding: sidebarCollapsed ? '6px 0' : '6px 8px',
+            justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+            gap: 10, marginBottom: 2 }}>
+            <CampanellaNotifiche nonLette={nonLette} onClick={() => setNotifPanelOpen(v => !v)} />
+            {!sidebarCollapsed && nonLette > 0 && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#d97706' }}>
+                {nonLette} nuov{nonLette === 1 ? 'a' : 'e'}
+              </span>
+            )}
           </div>
-        ) : animali.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ fontSize: 32, marginBottom: 10 }}>🐾</div>
-            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Nessun animale registrato per questo cliente
+
+          {/* Avatar → Impostazioni */}
+          <motion.button
+            className={"sidebar-item" + (active === "impostazioni" ? " active" : "")}
+            onClick={() => handleNav("impostazioni")}
+            whileHover={{ x: sidebarCollapsed ? 0 : 3 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            title={sidebarCollapsed ? "Impostazioni" : undefined}
+            style={{ marginBottom: 2 }}
+          >
+            <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+              background: 'linear-gradient(145deg, #5aabff, #2060dd)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 800, color: '#fff' }}>
+              {session?.user?.email ? session.user.email.slice(0, 2).toUpperCase() : '?'}
             </div>
-            <button onClick={() => setShowAddPet(true)} style={{ ...btnGreen, fontSize: 13 }}>
-              + Aggiungi il primo pet
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {animali.map(a => (
-              <div
-                key={a.id}
-                onClick={() => onNavigateToPet && onNavigateToPet(a.id)}
-                style={{ ...glassCard, display: 'flex', alignItems: 'center', gap: 13, padding: '13px 15px', cursor: onNavigateToPet ? 'pointer' : 'default' }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                  background: 'linear-gradient(145deg,rgba(90,171,255,0.2),rgba(32,96,221,0.12))',
-                  border: '2px solid rgba(90,171,255,0.35)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-                }}>
-                  {specieEmoji(a.specie)}
+            <span className="sidebar-label" style={{ fontSize: 14 }}>
+              {session?.user?.email?.split('@')[0] || 'Impostazioni'}
+            </span>
+          </motion.button>
+
+          {/* Toggle comprimi/espandi — liquid glass pill */}
+          <button
+            className="sidebar-toggle-btn"
+            onClick={() => setSidebarCollapsed(c => !c)}
+            title={sidebarCollapsed ? "Espandi menu" : "Comprimi menu"}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18, flexShrink: 0, transition: 'transform 0.3s' }}>
+              {sidebarCollapsed
+                ? <><path d="M13 18l6-6-6-6"/><path d="M5 18l6-6-6-6"/></>
+                : <><path d="M11 18l-6-6 6-6"/><path d="M19 18l-6-6 6-6"/></>
+              }
+            </svg>
+            <span className="sidebar-label" style={{ letterSpacing: '0.1px' }}>
+              {sidebarCollapsed ? "Espandi" : "Comprimi"}
+            </span>
+          </button>
+
+          <motion.button
+            className="sidebar-item"
+            onClick={handleLogout}
+            whileHover={{ x: sidebarCollapsed ? 0 : 3 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            title={sidebarCollapsed ? "Esci" : undefined}
+            style={{ color: 'rgba(220,60,60,0.7)', marginTop: 4 }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 22, height: 22, flexShrink: 0 }}>
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            <span className="sidebar-label">Esci</span>
+          </motion.button>
+        </nav>
+
+        {/* Main — AnimatePresence per transizioni tra pagine */}
+        <main className={"main" + (navHidden ? " nav-hidden" : "") + (sidebarCollapsed ? " sidebar-collapsed" : "")}>
+          <AnimatePresence mode="sync">
+            <motion.div
+              key={active}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              style={{ height: "100%" }}
+            >
+              <Suspense fallback={
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    border: '3px solid rgba(37,99,235,0.2)',
+                    borderTopColor: '#2563eb',
+                    animation: 'spin 0.7s linear infinite',
+                  }} />
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{a.nome}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>
-                    {a.razze?.nome || a.specie}
-                    {a.data_nascita && (() => {
-                      const anni = Math.floor((new Date() - new Date(a.data_nascita)) / (1000 * 60 * 60 * 24 * 365));
-                      return anni > 0 ? ` - ${anni}a` : ' - < 1a';
-                    })()}
-                    {a.colore && ` - ${a.colore}`}
-                  </div>
-                  {a.zone_critiche && (
-                    <div style={{ fontSize: 11, color: '#d97706', marginTop: 3 }}>⚠️ {a.zone_critiche}</div>
+              }>
+              {renderView()}
+              </Suspense>
+            </motion.div>
+          </AnimatePresence>
+        </main>
+
+        {/* Bottone toggle nav — visibile solo quando nav è nascosta */}
+        <AnimatePresence>
+          {navHidden && (
+            <motion.button
+              className="nav-toggle"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 400, damping: 28 }}
+              onClick={() => setNavHidden(false)}
+              style={{
+                position: "fixed", bottom: 16, left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 100,
+                background: "rgba(210,228,255,0.75)",
+                border: "1px solid rgba(255,255,255,0.85)",
+                borderRadius: 20,
+                padding: "8px 18px",
+                display: "flex", alignItems: "center", gap: 6,
+                cursor: "pointer", fontFamily: "inherit",
+                fontSize: 12, fontWeight: 600,
+                color: "rgba(20,50,130,0.8)",
+                WebkitBackdropFilter: "blur(20px)",
+                backdropFilter: "blur(20px)",
+                boxShadow: "0 2px 0 rgba(255,255,255,0.9) inset, 0 4px 16px rgba(60,100,200,0.2)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M3 12h18M3 6h18M3 18h18"/>
+              </svg>
+              Menu
+            </motion.button>
+          )}
+        </AnimatePresence>
+
+        {/* Bottom nav */}
+        <AnimatePresence>
+          {!navHidden && (() => {
+            const NAV_MAIN  = NAV_ITEMS.filter(i => ['home','calendario','clienti','pet'].includes(i.id));
+            const NAV_EXTRA = NAV_ITEMS.filter(i => !['home','calendario','clienti','pet'].includes(i.id) && !(VISTE_ADMIN_ONLY.includes(i.id) && !isAdmin));
+            return (
+              <motion.nav
+                className="bottom-nav"
+                initial={{ y: 80, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 80, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              >
+                {/* Riga principale — 4 voci + tasto cassetto */}
+                <div className="bottom-nav-row">
+                  {NAV_MAIN.map((item) => (
+                    <motion.button
+                      key={item.id}
+                      className={"nav-item" + (active === item.id ? " active" : "")}
+                      onClick={() => { handleNav(item.id); setNavDrawerOpen(false); }}
+                      whileTap={{ scale: 0.9 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    >
+                      <motion.span
+                        animate={active === item.id ? { scale: [1, 1.2, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                        style={{ display: "flex" }}
+                      >
+                        {item.icon}
+                      </motion.span>
+                      <span>{item.label}</span>
+                    </motion.button>
+                  ))}
+
+                  {/* Tasto apri cassetto */}
+                  <motion.button
+                    className={"nav-item" + (navDrawerOpen || NAV_EXTRA.some(i => i.id === active) ? " active" : "")}
+                    onClick={() => setNavDrawerOpen(v => !v)}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  >
+                    <motion.svg
+                      width="22" height="22" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                      animate={{ rotate: navDrawerOpen ? 90 : 0 }}
+                      transition={{ duration: 0.22 }}
+                    >
+                      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+                    </motion.svg>
+                    <span>Altro</span>
+                  </motion.button>
+                </div>
+
+                {/* Cassetto — voci extra */}
+                <AnimatePresence>
+                  {navDrawerOpen && (
+                    <motion.div
+                      className="bottom-nav-drawer"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ overflow: "hidden", maxWidth: "100%" }}
+                    >
+                      {NAV_EXTRA.map((item) => (
+                        <motion.button
+                          key={item.id}
+                          className={"nav-item" + (active === item.id ? " active" : "")}
+                          onClick={() => { handleNav(item.id); setNavDrawerOpen(false); }}
+                          whileTap={{ scale: 0.9 }}
+                          style={{ flex: "0 0 calc(25% - 2px)" }}
+                        >
+                          <motion.span
+                            animate={active === item.id ? { scale: [1, 1.2, 1] } : { scale: 1 }}
+                            transition={{ duration: 0.3 }}
+                            style={{ display: "flex" }}
+                          >
+                            {item.icon}
+                          </motion.span>
+                          <span>{item.label}</span>
+                        </motion.button>
+                      ))}
+                    </motion.div>
                   )}
-                </div>
-                <div style={{ fontSize: 18, color: 'var(--text-muted)' }}>›</div>
-              </div>
-            ))}
-          </div>
-        )}
+                </AnimatePresence>
+              </motion.nav>
+            );
+          })()}
+        </AnimatePresence>
       </div>
-
-      {/* Modal aggiungi pet */}
-      {showAddPet && (
-        <ModalAggiungiAnimale
-          clienteId={cliente.id}
-          clienteNome={`${cliente.cognome} ${cliente.nome}`}
-          razze={razze}
-          operatori={operatori}
-          onClose={() => setShowAddPet(false)}
-          onSaved={(pet) => { handlePetAdded(pet); setShowAddPet(false); }}
-        />
-      )}
-
-      {/* ── MODALE MODIFICA CLIENTE ────────────────────────── */}
+      {/* Toast notifica WhatsApp in tempo reale */}
       <AnimatePresence>
-        {showEditModal && (
+        {nuovaToast && (
+          <NotificaToast
+            notifica={nuovaToast}
+            onClose={() => {}}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Pannello notifiche slide-in */}
+      <AnimatePresence>
+        {notifPanelOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setNotifPanelOpen(false)}
+              style={{ position: 'fixed', inset: 0, zIndex: 399,
+                background: 'rgba(0,0,0,0.25)', WebkitBackdropFilter: 'blur(2px)', backdropFilter: 'blur(2px)' }}
+            />
+            <NotifichePanel
+              notifiche={notifiche}
+              nonLette={nonLette}
+              onMarcaLette={marcaLette}
+              onClose={() => setNotifPanelOpen(false)}
+              onNavigate={(sezione) => { setActive(sezione); setNotifPanelOpen(false); }}
+            />
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Ricerca globale overlay */}
+      <AnimatePresence>
+        {showRicerca && (
+          <Suspense fallback={null}>
+            <RicercaGlobale
+              onClose={() => setShowRicerca(false)}
+              onNavigate={(id, opts = {}) => {
+                if (opts.petId)     { setPendingPetId(opts.petId); }
+                if (opts.clienteId) { setPendingClienteId(opts.clienteId); }
+                handleNav(id);
+              }}
+            />
+          </Suspense>
+        )}
+      </AnimatePresence>
+
+      {/* ── Easter egg: Il cuore di Nemora ── */}
+      <AnimatePresence>
+        {showEasterEgg && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(10,24,64,0.45)',
-              backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-            onClick={e => e.target === e.currentTarget && setShowEditModal(false)}>
+            onClick={() => setShowEasterEgg(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 500,
+              background: 'rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            }}
+          >
             <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.97 }}
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-              style={{ ...glass, padding: 24, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto' }}>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>✏️ Modifica cliente</div>
-                <button onClick={() => setShowEditModal(false)} style={{ background: 'var(--card-bg-sm)', border: '1px solid rgba(255,255,255,0.7)', borderRadius: 10, width: 32, height: 32, cursor: 'pointer', fontSize: 18, color: 'var(--text-secondary)', fontFamily: 'inherit' }}>×</button>
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 400,
+                background: 'rgba(255,255,255,0.72)',
+                border: '1px solid rgba(255,255,255,0.9)',
+                borderRadius: 28, padding: '36px 32px 32px',
+                boxShadow: '0 2px 0 rgba(255,255,255,0.95) inset, 0 20px 60px rgba(0,0,0,0.18)',
+                backdropFilter: 'blur(40px) saturate(1.8)', WebkitBackdropFilter: 'blur(40px) saturate(1.8)',
+              }}
+            >
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <img src="/assets/nemora-icon-1024.svg" alt="Nemora"
+                  style={{ width: 72, height: 72, borderRadius: 18, margin: '0 auto' }} />
               </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <div style={secLabel}>Cognome</div>
-                    <input type="text" value={editForm.cognome}
-                      onChange={e => setEditForm(p => ({ ...p, cognome: e.target.value }))}
-                      style={inputStyle} placeholder="Cognome" />
-                  </div>
-                  <div>
-                    <div style={secLabel}>Nome *</div>
-                    <input type="text" value={editForm.nome}
-                      onChange={e => setEditForm(p => ({ ...p, nome: e.target.value }))}
-                      style={inputStyle} placeholder="Nome" />
-                  </div>
-                </div>
-
-                <div>
-                  <div style={secLabel}>📱 Telefono</div>
-                  <input type="tel" value={editForm.telefono}
-                    onChange={e => setEditForm(p => ({ ...p, telefono: e.target.value }))}
-                    style={inputStyle} placeholder="Es. 333 1234567" />
-                </div>
-
-                <div>
-                  <div style={secLabel}>📧 Email</div>
-                  <input type="email" value={editForm.email}
-                    onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
-                    style={inputStyle} placeholder="Es. mario@email.com" />
-                </div>
-
-                <div>
-                  <div style={secLabel}>📍 Indirizzo</div>
-                  <input type="text" value={editForm.indirizzo}
-                    onChange={e => setEditForm(p => ({ ...p, indirizzo: e.target.value }))}
-                    style={inputStyle} placeholder="Via, città..." />
-                </div>
-
-                <div>
-                  <div style={secLabel}>💰 Prezzo riservato</div>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>€</span>
-                    <input type="number" min="0" step="0.50" value={editForm.prezzo_riservato}
-                      onChange={e => setEditForm(p => ({ ...p, prezzo_riservato: e.target.value }))}
-                      style={{ ...inputStyle, paddingLeft: 26 }} placeholder="Lascia vuoto per prezzo standard" />
-                  </div>
-                </div>
-
-                <div>
-                  <div style={secLabel}>📝 Note</div>
-                  <textarea rows={3} value={editForm.note}
-                    onChange={e => setEditForm(p => ({ ...p, note: e.target.value }))}
-                    style={{ ...inputStyle, resize: 'vertical' }}
-                    placeholder="Note interne sul cliente..." />
-                </div>
+              <h2 style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+                Il cuore di Nemora
+              </h2>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 20px' }}>
+                Nemora non è solo un nome, è un tributo alla nostra famiglia. Nasce dall'intreccio delle anime che hanno vissuto e che vivono con noi.
+              </p>
+              <div style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.18)', borderRadius: 16, padding: '14px 16px', marginBottom: 16 }}>
+                <p style={{ margin: 0, fontSize: 13, color: '#0F6E56', lineHeight: 1.7 }}>
+                  Il nome affonda le sue radici nel termine latino <em>nemora</em> — i boschi, i luoghi sacri della natura — evocando rifugio, pace e rigenerazione.
+                </p>
               </div>
-
-              {editError && (
-                <div style={{ fontSize: 13, color: '#dc2626', margin: '12px 0', padding: '8px 12px',
-                  background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>{editError}</div>
-              )}
-
-              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-                <button onClick={() => setShowEditModal(false)} style={{ ...btnSecondary, flex: 1 }}>Annulla</button>
-                <button onClick={saveEditForm} disabled={savingEdit}
-                  style={{ ...btnPrimary, flex: 2, opacity: savingEdit ? 0.7 : 1 }}>
-                  {savingEdit ? 'Salvataggio...' : '✓ Salva modifiche'}
-                </button>
-              </div>
+              {[
+                { titolo: 'Purezza', testo: 'Come un respiro nel bosco, un servizio che mette al centro il benessere naturale del tuo animale.' },
+                { titolo: 'Innovazione e Cura', testo: 'Tecnologia moderna e dedizione artigianale del grooming, in equilibrio perfetto.' },
+                { titolo: 'Identità', testo: 'Ogni lettera custodisce il nome di un compagno di vita, perché la cura deve sempre partire dal cuore.' },
+              ].map(({ titolo, testo }) => (
+                <div key={titolo} style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'flex-start' }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1D9E75', flexShrink: 0, marginTop: 6 }} />
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+                    <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{titolo}:</strong> {testo}
+                  </p>
+                </div>
+              ))}
+              <p style={{ textAlign: 'center', margin: '20px 0 8px', fontSize: 13, fontStyle: 'italic', color: '#1D9E75', letterSpacing: '0.2px' }}>
+                Dove la tecnologia incontra il benessere, ispirata da chi amiamo.
+              </p>
+              <p style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.3px' }}>
+                v{APP_VERSION} · {BUILD_DATE}
+              </p>
+              <button
+                onClick={() => setShowEasterEgg(false)}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 16,
+                  border: '1px solid rgba(29,158,117,0.3)',
+                  background: 'rgba(29,158,117,0.08)',
+                  color: '#0F6E56', fontSize: 14, fontWeight: 600,
+                  fontFamily: 'inherit', cursor: 'pointer',
+                }}
+              >
+                ✦ Chiudi
+              </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
 
-// ─────────────────────────────────────────────────────────────
-// LISTA CLIENTI
-// ─────────────────────────────────────────────────────────────
-function ListaClienti({ clienti, loading, onSelect, onAdd }) {
-  const [search, setSearch] = useState('');
-  const filtered = clienti.filter(c =>
-    `${c.cognome} ${c.nome}`.toLowerCase().includes(search.toLowerCase()) ||
-    (c.telefono || '').includes(search) ||
-    (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.animali_nomi || '').toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      style={{ width: '100%' }}
-    >
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}
-      >
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>👤 Clienti</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{clienti.length} clienti registrati</div>
-        </div>
-        <button onClick={onAdd} style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-          <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Aggiungi cliente
-        </button>
-      </motion.div>
-
-      {/* Ricerca */}
-      <div style={{ ...glassCard, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 16, opacity: 0.5 }}>🔍</span>
-        <input type="text" placeholder="Cerca per nome, telefono, email o animale..."
-          value={search} onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit' }} />
-        {search && (
-          <button onClick={() => setSearch('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)' }}>×</button>
-        )}
-      </div>
-
-      {/* Lista */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', fontSize: 14 }}>
-          Caricamento clienti...
-        </div>
-      ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>👤</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-            {search ? 'Nessun risultato' : 'Nessun cliente registrato'}
-          </div>
-          <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
-            {search ? 'Prova con un altro termine' : 'Aggiungi il primo cliente per iniziare'}
-          </div>
-          {!search && <button onClick={onAdd} style={btnPrimary}>+ Aggiungi cliente</button>}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
-          {filtered.map((c, i) => (
-            <motion.button
-              key={c.id}
-              onClick={() => onSelect(c)}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.25, ease: [0.22,1,0.36,1] }}
-              whileHover={{ scale: 1.01, y: -2 }}
-              whileTap={{ scale: 0.98 }}
-              style={{
-                ...glassCard, display: 'flex', alignItems: 'center', gap: 14,
-                padding: '14px 16px', cursor: 'pointer', textAlign: 'left',
-                width: '100%', fontFamily: 'inherit',
-              }}
-            >
-              {/* Avatar iniziali */}
-              <div style={{
-                width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
-                background: 'linear-gradient(145deg,rgba(90,171,255,0.25),rgba(32,96,221,0.15))',
-                border: '2px solid rgba(90,171,255,0.35)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 700, color: '#2563eb',
-              }}>
-                {c.cognome?.[0]}{c.nome?.[0]}
-              </div>
-
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {c.cognome} {c.nome}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, display: 'flex', gap: 10 }}>
-                  {c.telefono && <span>📱 {c.telefono}</span>}
-                  {c.email && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📧 {c.email}</span>}
-                </div>
-              </div>
-
-              {/* Badge animali + freccia */}
-              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {c.animali_count > 0 && (
-                  <div style={{ fontSize: 11, fontWeight: 600, background: 'rgba(16,185,129,0.12)', color: '#059669', padding: '3px 8px', borderRadius: 20 }}>
-                    {c.animali_count} 🐾
-                  </div>
-                )}
-                {c.prezzo_riservato && (
-                  <div style={{ fontSize: 11, fontWeight: 700, background: 'rgba(37,99,235,0.1)', color: '#2563eb', padding: '3px 8px', borderRadius: 20 }}>
-                    € {Number(c.prezzo_riservato).toFixed(0)}
-                  </div>
-                )}
-                <div style={{ fontSize: 18, color: 'var(--text-muted)' }}>›</div>
-              </div>
-            </motion.button>
-          ))}
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// EXPORT PRINCIPALE
-// ─────────────────────────────────────────────────────────────
-export default function ClientiView({ onNavigateToPet, initialClienteId, onClienteOpened }) {
-  const [clienti,   setClienti]   = useState([]);
-  const [razze,     setRazze]     = useState([]);
-  const [operatori, setOperatori] = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [selected,  setSelected]  = useState(null);
-  const [showModal, setShowModal] = useState(false);
-
-  useEffect(() => { fetchAll(); }, []);
-
-  // Auto-selezione da ricerca globale — aspetta che clienti sia caricato
-  useEffect(() => {
-    if (!initialClienteId || loading || clienti.length === 0) return;
-    const cliente = clienti.find(c => c.id === initialClienteId);
-    if (cliente) {
-      setSelected(cliente);
-      onClienteOpened?.();
-    }
-  }, [initialClienteId, loading, clienti]);
-
-  const fetchAll = async () => {
-    setLoading(true);
-    const [cl, rz, op] = await Promise.all([
-      supabase
-        .from('clienti')
-        .select('*, animali(id, nome)')
-        .order('cognome'),
-      supabase.from('razze').select('id,nome,specie').order('nome'),
-      supabase.from('operatori').select('id,nome,cognome').eq('attivo', true).order('nome'),
-    ]);
-
-    // Normalize animali — count e nomi per la ricerca
-    const clientiWithCount = (cl.data || []).map(c => ({
-      ...c,
-      animali_count: c.animali?.length || 0,
-      animali_nomi: (c.animali || []).map(a => a.nome).join(' '),
-    }));
-
-    setClienti(clientiWithCount);
-    setRazze(rz.data || []);
-    setOperatori(op.data || []);
-    setLoading(false);
-  };
-
-  const handleClienteSaved = (c) => {
-    setClienti(prev => [...prev, { ...c, animali_count: c.animali_count || 0 }]
-      .sort((a, b) => a.cognome.localeCompare(b.cognome)));
-  };
-
-  const handleClienteUpdate = (c) => {
-    setClienti(prev => prev.map(x => x.id === c.id ? { ...x, ...c } : x));
-    setSelected(c);
-  };
-
-  const handleClienteDelete = (id) => {
-    setClienti(prev => prev.filter(x => x.id !== id));
-    setSelected(null);
-  };
-
-  if (selected) {
-    return (
-      <SchedaCliente
-        cliente={selected}
-        razze={razze}
-        operatori={operatori}
-        onUpdate={handleClienteUpdate}
-        onBack={() => setSelected(null)}
-        onNavigateToPet={onNavigateToPet}
-        onDelete={handleClienteDelete}
-      />
-    );
-  }
-
-  return (
-    <>
-      <ListaClienti
-        clienti={clienti}
-        loading={loading}
-        onSelect={setSelected}
-        onAdd={() => setShowModal(true)}
-      />
-      <AnimatePresence>
-        {showModal && (
-          <ModalAggiungiCliente
-            razze={razze}
-            operatori={operatori}
-            onClose={() => setShowModal(false)}
-            onSaved={handleClienteSaved}
-          />
-        )}
-      </AnimatePresence>
+     <OfflineIndicator />
     </>
   );
 }
