@@ -934,7 +934,7 @@ function ListaClienti({ clienti, loading, onSelect, onAdd }) {
 // ─────────────────────────────────────────────────────────────
 // EXPORT PRINCIPALE
 // ─────────────────────────────────────────────────────────────
-export default function ClientiView({ onNavigateToPet }) {
+export default function ClientiView({ onNavigateToPet, initialClienteId, onClienteOpened }) {
   const [clienti,   setClienti]   = useState([]);
   const [razze,     setRazze]     = useState([]);
   const [operatori, setOperatori] = useState([]);
@@ -943,6 +943,16 @@ export default function ClientiView({ onNavigateToPet }) {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
+
+  // Auto-selezione da ricerca globale — aspetta che clienti sia caricato
+  useEffect(() => {
+    if (!initialClienteId || loading || clienti.length === 0) return;
+    const cliente = clienti.find(c => c.id === initialClienteId);
+    if (cliente) {
+      setSelected(cliente);
+      onClienteOpened?.();
+    }
+  }, [initialClienteId, loading, clienti]);
 
   const fetchAll = async () => {
     setLoading(true);

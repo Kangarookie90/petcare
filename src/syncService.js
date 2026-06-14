@@ -9,7 +9,7 @@
  *
  * Tabelle sincronizzate:
  *   clienti, animali (+ comportamento/comportamento_note), operatori, servizi, razze,
- *   appuntamenti, primanota, appuntamenti_servizi, notifiche, lista_attesa
+ *   appuntamenti, primanota, appuntamenti_servizi, notifiche, lista_attesa, operatori_orari
  *
  * Storage (mai in coda — gestiti direttamente):
  *   animali-memo (note vocali), appuntamenti-foto (check-in fotografico)
@@ -19,14 +19,9 @@ import { supabase } from './supabaseClient';
 import { db } from './db';
 
 // ── Tabelle da sincronizzare ──────────────────────────────────
-const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi', 'appuntamenti_animali', 'notifiche', 'lista_attesa'];
+const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appuntamenti', 'primanota', 'appuntamenti_servizi', 'appuntamenti_animali', 'notifiche', 'lista_attesa', 'operatori_orari'];
 
-// ── Select per tabelle con join o campi specifici ────────────
-// animali:               include campi sanitari + nuovi campi comportamento e note vocali
-// appuntamenti:          include note, prezzi, metodo_pagamento + join con id su clienti/animali e campi problemi
-// appuntamenti_animali:  junction table multi-animale — include dati animale per uso offline
-// notifiche:             sola lettura — inserite dal webhook WhatsApp server-side
-// lista_attesa:          include join a clienti, animali, operatori
+// ── Select per tabelle con join o campi specifici ─────────────
 const SELECT_MAP = {
   animali:              '*, razze(id, nome), clienti(id, nome, cognome)',
   appuntamenti:         '*, clienti(id, nome, cognome), animali(id, nome, specie, problemi_carattere, problemi_salute), operatori(id, nome, cognome, colore)',
@@ -35,13 +30,14 @@ const SELECT_MAP = {
   lista_attesa:         '*, clienti(id, nome, cognome, telefono), animali(id, nome, specie), operatori(id, nome, colore)',
 };
 
-// ── Tabelle in sola lettura (mai in coda scrittura) ──────────
-// notifiche: inserite dal webhook server-side
+// ── Tabelle in sola lettura (mai in coda scrittura) ───────────
 const TABELLE_READONLY = new Set(['notifiche']);
 
-// ── Tabelle che non vanno mai cancellate in blocco durante sync ─
-// lista_attesa: sincronizzata per delta, non in clear+bulkPut
+// ── Tabelle che non vanno cancellate in blocco durante sync ───
+// lista_attesa: sincronizzata per delta per evitare flash UI
 const TABELLE_DELTA = new Set(['lista_attesa']);
+
+// ── Stato connettività ────────────────────────────────────────
 let isOnline = navigator.onLine;
 const listeners = new Set();
 
@@ -66,38 +62,75 @@ function tempId() {
   return 'offline_' + Date.now() + '_' + Math.random().toString(36).slice(2);
 }
 
-// ── Sync completo (scarica tutto da Supabase → DB locale) ────
+// ─────────────────────────────────────────────────────────────
+// FIX 1: Flag anti-sync-paralleli
+// Impedisce che due syncAll() girino contemporaneamente
+// (es. reconnect + timer nello stesso momento).
+// ─────────────────────────────────────────────────────────────
+let _syncInProgress = false;
+
+// ─────────────────────────────────────────────────────────────
+// FIX 3: Debounce per syncTabella() chiamata da leggi()
+// Se una tabella è stata sincronizzata negli ultimi 60s,
+// non parte un nuovo sync — evita il thrashing su IndexedDB
+// quando più componenti leggono la stessa tabella in rapida successione.
+// ─────────────────────────────────────────────────────────────
+const _ultimoSyncPerTabella = new Map(); // tabella → timestamp ms
+const DEBOUNCE_LEGGI_MS = 60_000; // 60 secondi
+
+// ── Sync completo (scarica tutto da Supabase → DB locale) ─────
 export async function syncAll() {
   if (!isOnline) return;
 
+  // FIX 1: Evita sync paralleli
+  if (_syncInProgress) {
+    console.log('[PetCare Sync] Sync già in corso, skip.');
+    return;
+  }
+  _syncInProgress = true;
+
   console.log('[PetCare Sync] Avvio sincronizzazione...');
 
-  // 1. Prima svuota la coda offline (invia le mutazioni pendenti)
-  await flushCoda();
+  try {
+    // 1. Prima svuota la coda offline (invia le mutazioni pendenti)
+    await flushCoda();
 
-  // 2. Scarica i dati freschi da Supabase
-  await Promise.all(
-    TABELLE.map(t => syncTabella(t, SELECT_MAP[t] || '*'))
-  );
-  
-  // 3. Aggiorna timestamp ultimo sync
-  await db._sync.put({ chiave: 'ultimo_sync', valore: new Date().toISOString() });
-  console.log('[PetCare Sync] Completato');
+    // 2. Scarica i dati freschi da Supabase — tabelle in parallelo
+    await Promise.all(
+      TABELLE.map(t => syncTabella(t, SELECT_MAP[t] || '*'))
+    );
+
+    // 3. Aggiorna timestamp ultimo sync
+    await db._sync.put({ chiave: 'ultimo_sync', valore: new Date().toISOString() });
+    console.log('[PetCare Sync] Completato');
+  } finally {
+    _syncInProgress = false;
+  }
 }
 
+// ── Sync singola tabella ──────────────────────────────────────
 async function syncTabella(tabella, select) {
   try {
     const { data, error } = await supabase.from(tabella).select(select);
     if (error) { console.error(`[Sync] Errore ${tabella}:`, error); return; }
-    if (data) {
-      if (TABELLE_DELTA.has(tabella)) {
-        // Delta sync: aggiorna/inserisce senza cancellare tutto
-        await db[tabella].bulkPut(data);
-      } else {
+    if (!data) return;
+
+    if (TABELLE_DELTA.has(tabella)) {
+      // Delta sync: aggiorna/inserisce senza cancellare tutto
+      await db[tabella].bulkPut(data);
+    } else {
+      // FIX 2: Operazione atomica con transazione Dexie
+      // clear() + bulkPut() in un'unica transazione —
+      // nessuna lettura vede mai la tabella vuota a metà operazione.
+      await db.transaction('rw', db[tabella], async () => {
         await db[tabella].clear();
         await db[tabella].bulkPut(data);
-      }
+      });
     }
+
+    // Aggiorna il timestamp di sync per questa tabella (usato dal debounce in leggi())
+    _ultimoSyncPerTabella.set(tabella, Date.now());
+
   } catch (e) {
     console.error(`[Sync] ${tabella}:`, e);
   }
@@ -160,12 +193,12 @@ async function flushCoda() {
 
 /**
  * Legge da DB locale (sempre istantaneo).
- * Se online, aggiorna in background.
+ * Se online, aggiorna in background — ma max una volta ogni 60s per tabella
+ * per evitare thrashing quando più componenti leggono in rapida successione.
  */
 export async function leggi(tabella, { filtri = {}, ordine = null } = {}) {
   // Lettura locale
-  let query = db[tabella].toArray();
-  let dati = await query;
+  let dati = await db[tabella].toArray();
 
   // Applica filtri semplici
   if (Object.keys(filtri).length > 0) {
@@ -181,10 +214,13 @@ export async function leggi(tabella, { filtri = {}, ordine = null } = {}) {
     });
   }
 
-  // Se online aggiorna in background (senza bloccare)
-  // Usa SELECT_MAP per preservare i join nei record locali
+  // FIX 3: Sync in background solo se non è stato fatto di recente
   if (isOnline) {
-    syncTabella(tabella, SELECT_MAP[tabella] || '*').catch(() => {});
+    const ultimoSync = _ultimoSyncPerTabella.get(tabella) ?? 0;
+    const msSinceSinc = Date.now() - ultimoSync;
+    if (msSinceSinc > DEBOUNCE_LEGGI_MS) {
+      syncTabella(tabella, SELECT_MAP[tabella] || '*').catch(() => {});
+    }
   }
 
   return dati;
@@ -202,11 +238,9 @@ export async function inserisci(tabella, payload) {
     await db[tabella].put(data);
     return data;
   } else {
-    // Crea record locale con ID temporaneo
     const idLocale = tempId();
     const recordLocale = { ...payload, id: idLocale, _id_locale: idLocale, _offline: true };
     await db[tabella].put(recordLocale);
-    // Accoda mutazione
     await db._coda.add({
       tabella,
       action: 'insert',
@@ -231,7 +265,6 @@ export async function aggiorna(tabella, id, payload) {
     await db[tabella].put(data);
     return data;
   } else {
-    // Accoda se offline o record ancora locale
     await db._coda.add({
       tabella,
       action: 'update',
@@ -262,14 +295,13 @@ export async function elimina(tabella, id) {
   }
 }
 
-// ── Avvio: sync iniziale se online ───────────────────────────
+// ── Avvio: sync iniziale se online ────────────────────────────
 export async function inizializzaSync() {
   const ultimoSync = await db._sync.get('ultimo_sync');
   const minutiDallUltimoSync = ultimoSync
     ? (Date.now() - new Date(ultimoSync.valore).getTime()) / 60000
     : Infinity;
 
-  // Sync se online e sono passati più di 5 minuti dall'ultimo
   if (isOnline && minutiDallUltimoSync > 5) {
     console.log('[Sync] Avvio sync iniziale...');
     syncAll();

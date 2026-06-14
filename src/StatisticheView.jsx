@@ -538,7 +538,18 @@ export default function StatisticheView({ role, session }) {
 
   const fetchAll = async () => {
     setLoading(true);
+
+    // Finestre temporali — appuntamenti e primanota degli ultimi 13 mesi
+    // (anno corrente + mese precedente per confronto), non tutto lo storico.
+    // Clienti, animali, operatori e servizi sono tabelle piccole — ok senza filtri.
+    const inizioFinestra = new Date();
+    inizioFinestra.setMonth(inizioFinestra.getMonth() - 13);
+    inizioFinestra.setDate(1);
+    inizioFinestra.setHours(0, 0, 0, 0);
+    const finestraISO = inizioFinestra.toISOString();
+
     const [ap, cl, an, op, sv, pn, apC] = await Promise.all([
+      // Appuntamenti: ultimi 13 mesi con tutti i join necessari
       supabase.from('appuntamenti').select(`
         id, inizio, fine, stato,
         clienti(id, nome, cognome),
@@ -546,17 +557,34 @@ export default function StatisticheView({ role, session }) {
         operatori(id, nome, cognome, colore),
         prezzo_proposto, prezzo_confermato, prezzo_confermato_flag,
         appuntamenti_servizi(servizio_id, prezzo_applicato, servizi(id, nome, prezzo, durata_minuti))
-      `).order('inizio'),
-      supabase.from('clienti').select('id, nome, cognome, telefono, email, indirizzo, note, created_at'),
-      supabase.from('animali').select('id, nome, specie, razza_id, colore, data_nascita, zone_critiche, note, operatore_preferito_id, created_at, razze(nome), clienti(nome, cognome)'), 
+      `)
+        .gte('inizio', finestraISO)
+        .order('inizio'),
+
+      // Clienti: solo i campi usati nelle statistiche
+      supabase.from('clienti').select('id, nome, cognome, created_at'),
+
+      // Animali: solo i campi usati
+      supabase.from('animali').select('id, nome, specie, created_at, clienti(nome, cognome)'),
+
+      // Operatori e servizi: tabelle piccole, nessun filtro
       supabase.from('operatori').select('id, nome, cognome, colore').eq('attivo', true),
       supabase.from('servizi').select('id, nome, prezzo, durata_minuti'),
-      supabase.from('primanota').select('id, data, tipo, importo, descrizione, operatore_id').order('data'),
+
+      // Primanota: ultimi 13 mesi
+      supabase.from('primanota')
+        .select('id, data, tipo, importo, descrizione, operatore_id')
+        .gte('data', finestraISO.slice(0, 10))
+        .order('data'),
+
+      // Appuntamenti confermati a prezzo fisso: stessa finestra
       supabase.from('appuntamenti')
         .select('id, inizio, prezzo_confermato, prezzo_proposto, metodo_pagamento')
         .eq('prezzo_confermato_flag', true)
+        .gte('inizio', finestraISO)
         .order('inizio'),
     ]);
+
     setAppuntamenti(ap.data || []);
     setClienti(cl.data || []);
     setAnimali(an.data || []);

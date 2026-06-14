@@ -1130,13 +1130,22 @@ export default function CalendarioView() {
     window.innerWidth < 640 ? 'timeGridDay' : 'timeGridWeek'
   );
   const [filtroOp,     setFiltroOp]     = useState('tutti');
-  const filtroOpRef = useRef('tutti');
+  const filtroOpRef   = useRef('tutti');
+  const refetchTimer  = useRef(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Debounce refetch — se arrivano più chiamate in 200ms parte una sola query
+  const refetchEvents = useCallback(() => {
+    clearTimeout(refetchTimer.current);
+    refetchTimer.current = setTimeout(() => {
+      calRef.current?.getApi().refetchEvents();
+    }, 200);
+  }, []);
 
   const setFiltroOpAndRefetch = (val) => {
     filtroOpRef.current = val;
     setFiltroOp(val);
-    calRef.current?.getApi().refetchEvents();
+    refetchEvents();
   };
 
   // Adatta la view al cambio orientamento / resize
@@ -1282,12 +1291,12 @@ export default function CalendarioView() {
 
   const handleSaved = (apData) => {
     // Forza FullCalendar a ri-richiedere gli eventi per il range visibile
-    calRef.current?.getApi().refetchEvents();
+    refetchEvents();
     setShowModal(false);
   };
 
   const handleDeleted = id => {
-    calRef.current?.getApi().refetchEvents();
+    refetchEvents();
   };
 
   // ── Richiamata AI → apre modal precompilato ───────────────
