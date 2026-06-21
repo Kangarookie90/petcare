@@ -483,7 +483,8 @@ export default function App() {
   const [pendingClienteId, setPendingClienteId] = useState(null);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [showEasterEgg,  setShowEasterEgg]  = useState(false);
-  const [session, setSession] = useState(undefined);
+  const [session,        setSession]        = useState(undefined);
+  const [roleVerificato, setRoleVerificato] = useState(null);
 
   // ── Notifiche: DEVE stare qui, prima di qualsiasi return condizionale ──
   const { notifiche, nonLette, nuovaToast, marcaLette } = useNotifiche();
@@ -496,6 +497,7 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession ?? null);
+      if (!newSession) setRoleVerificato(null);
     });
 
     return () => subscription.unsubscribe();
@@ -505,6 +507,26 @@ export default function App() {
   useEffect(() => {
     if (session) inizializzaSync();
   }, [session]);
+
+  // ── Verifica ruolo da DB (fonte server-side) ──────────────
+  useEffect(() => {
+    if (!session?.user?.email) { setRoleVerificato(null); return; }
+    supabase
+      .from('operatori')
+      .select('ruolo')
+      .eq('email', session.user.email)
+      .maybeSingle()
+      .then(({ data }) => {
+        const ruoloMetadata = session.user.user_metadata?.role ?? 'operatore';
+        const ruoloDb       = data?.ruolo ?? 'operatore';
+        const ruoloFinale   = (ruoloMetadata === 'admin' && ruoloDb === 'admin') ? 'admin' : 'operatore';
+        if (ruoloMetadata !== ruoloDb) {
+          console.warn('[Auth] Ruolo divergente — metadata:', ruoloMetadata, '/ DB:', ruoloDb, '→ uso:', ruoloFinale);
+        }
+        setRoleVerificato(ruoloFinale);
+      })
+      .catch(() => setRoleVerificato(session.user.user_metadata?.role ?? 'operatore'));
+  }, [session?.user?.email]);
 
   // Cmd+K / Ctrl+K apre la ricerca globale
   useEffect(() => {
@@ -552,7 +574,7 @@ export default function App() {
   }
 
   // ── Ruolo utente — default a 'operatore' se non impostato (sicuro by default) ──
-  const role    = session?.user?.user_metadata?.role ?? 'operatore';
+  const role    = roleVerificato ?? session?.user?.user_metadata?.role ?? 'operatore';
   const isAdmin = role === 'admin';
 
   // ── Viste accessibili per ruolo ──────────────────────────────
@@ -891,7 +913,7 @@ export default function App() {
           {/* Bottone ricerca globale */}
           <button
             className="sidebar-item"
-            onClick={() => setShowRicerca(true)}
+            onClick={() => { setShowRicerca(true); setNavDrawerOpen(false); }}
             title={sidebarCollapsed ? "Cerca (⌘K)" : undefined}
             style={{ color: 'rgba(20,50,120,0.55)', marginTop: 4 }}
           >
