@@ -492,12 +492,68 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       const animaliAssociati = f.animali_ids.map(aid => [...animali, ...tuttiAnimali].find(x => x.id === aid)).filter(Boolean);
       onSaved({ ...result.data, _serviziMultipli: serviziAssociati, _animaliIds: f.animali_ids, _animaliMultipli: animaliAssociati });
 
-      // Se completato → suggerimento per ogni animale (usa il primo come principale)
+      // Se completato → calcola prossima visita, salva su animale, crea notifica recall
       if (f.stato === 'completato' && f.animali_ids.length > 0) {
         setShowFotoCheckin(true);
-        calcolaSuggerimento(f.animali_ids[0], result.data.inizio).then(sug => {
-          if (sug) setSuggerimentoData({ ...sug, apData: result.data });
-        });
+
+        // Per ogni animale coinvolto: calcola prossima visita e crea notifica recall
+        Promise.all(f.animali_ids.map(async (animaleId) => {
+          try {
+            // 1. Leggi il record animale per vedere se ha frequenza esplicita
+            const { data: animaleData } = await supabase
+              .from('animali')
+              .select('id, nome, frequenza_toeletta_giorni, cliente_id, clienti(id, nome, cognome, telefono)')
+              .eq('id', animaleId)
+              .single();
+
+            if (!animaleData) return;
+
+            // 2. Calcola frequenza: usa quella esplicita, fallback sullo storico
+            let freqGiorni = animaleData.frequenza_toeletta_giorni;
+            if (!freqGiorni) {
+              const sug = await calcolaSuggerimento(animaleId, result.data.inizio);
+              if (sug) freqGiorni = sug.freqGiorni;
+            }
+
+            if (!freqGiorni) return; // nessuna frequenza disponibile — skip
+
+            // 3. Calcola data prossima visita
+            const prossimaData = new Date(new Date(result.data.inizio).getTime() + freqGiorni * 24 * 60 * 60 * 1000);
+            const prossimaISO  = prossimaData.toISOString().slice(0, 10);
+
+            // 4. Salva prossima_visita_attesa sull'animale
+            await supabase
+              .from('animali')
+              .update({ prossima_visita_attesa: prossimaISO })
+              .eq('id', animaleId);
+
+            // 5. Crea notifica recall — viene mostrata nella campanella N giorni prima
+            //    La notifica ha data = prossima_visita_attesa così è facile filtrarla
+            const cliente = animaleData.clienti;
+            await supabase.from('notifiche').insert({
+              tipo:         'recall',
+              animale_id:   animaleId,
+              cliente_id:   animaleData.cliente_id,
+              messaggio:    `${animaleData.nome} — prossima toeletta prevista il ${prossimaData.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })} (ogni ${freqGiorni} giorni)`,
+              telefono_cliente: cliente?.telefono || null,
+              letto:        false,
+              created_at:   new Date().toISOString(),
+              appuntamento_id: result.data.id,
+            });
+
+            // 6. Suggerimento UI solo per il primo animale (comportamento esistente)
+            if (animaleId === f.animali_ids[0]) {
+              setSuggerimentoData({
+                freqGiorni,
+                prossima: prossimaData,
+                apData:   result.data,
+              });
+            }
+          } catch (e) {
+            console.error('[Recall] Errore per animale', animaleId, e);
+          }
+        }));
+
         return;
       }
       onClose();

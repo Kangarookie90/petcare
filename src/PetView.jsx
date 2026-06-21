@@ -520,12 +520,13 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   // ── Modifica scheda completa ──
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
-    nome:         animale.nome         || '',
-    specie:       animale.specie       || 'cane',
-    razza_id:     animale.razza_id     || '',
-    data_nascita: animale.data_nascita || '',
-    colore:       animale.colore       || '',
-    note:         animale.note         || '',
+    nome:                      animale.nome                      || '',
+    specie:                    animale.specie                    || 'cane',
+    razza_id:                  animale.razza_id                  || '',
+    data_nascita:              animale.data_nascita              || '',
+    colore:                    animale.colore                    || '',
+    note:                      animale.note                      || '',
+    frequenza_toeletta_giorni: animale.frequenza_toeletta_giorni || '',
   });
   const [editFormRazze, setEditFormRazze] = useState([]);
   const [savingEdit,    setSavingEdit]    = useState(false);
@@ -545,13 +546,15 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
   const saveEditForm = async () => {
     if (!editForm.nome.trim()) { setEditError('Il nome è obbligatorio'); return; }
     setSavingEdit(true); setEditError('');
+    const freqGiorni = parseInt(editForm.frequenza_toeletta_giorni);
     const updates = {
-      nome:         editForm.nome.trim(),
-      specie:       editForm.specie,
-      razza_id:     editForm.razza_id || null,
-      data_nascita: editForm.data_nascita || null,
-      colore:       editForm.colore.trim() || null,
-      note:         editForm.note.trim() || null,
+      nome:                      editForm.nome.trim(),
+      specie:                    editForm.specie,
+      razza_id:                  editForm.razza_id || null,
+      data_nascita:              editForm.data_nascita || null,
+      colore:                    editForm.colore.trim() || null,
+      note:                      editForm.note.trim() || null,
+      frequenza_toeletta_giorni: freqGiorni > 0 ? freqGiorni : null,
     };
     const { error } = await supabase.from('animali').update(updates).eq('id', animale.id);
     setSavingEdit(false);
@@ -885,7 +888,7 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
       <div style={{marginBottom:14, display:'flex', gap:8, alignItems:'center'}}>
         <button onClick={onBack} style={{...btnSecondary,padding:'8px 14px',fontSize:13}}>← Indietro</button>
         <button
-          onClick={() => { setEditForm({ nome: animale.nome||'', specie: animale.specie||'cane', razza_id: animale.razza_id||'', data_nascita: animale.data_nascita||'', colore: animale.colore||'', note: animale.note||'' }); setEditError(''); setShowEditModal(true); }}
+          onClick={() => { setEditForm({ nome: animale.nome||'', specie: animale.specie||'cane', razza_id: animale.razza_id||'', data_nascita: animale.data_nascita||'', colore: animale.colore||'', note: animale.note||'', frequenza_toeletta_giorni: animale.frequenza_toeletta_giorni||'' }); setEditError(''); setShowEditModal(true); }}
           style={{...btnSecondary, padding:'8px 14px', fontSize:13, display:'flex', alignItems:'center', gap:6}}>
           ✏️ Modifica scheda
         </button>
@@ -1788,6 +1791,28 @@ function SchedaAnimale({ animale, operatori, onUpdate, onBack }) {
                   <input type="text" value={editForm.colore}
                     onChange={e => setEditForm(p=>({...p, colore:e.target.value}))}
                     style={inputStyle} placeholder="Es. nero, bianco, fulvo..." />
+                </div>
+
+                <div>
+                  <div style={secLabel}>🔁 Frequenza toeletta</div>
+                  <div style={{display:'flex', alignItems:'center', gap:8}}>
+                    <input
+                      type="number" min="1" max="365"
+                      value={editForm.frequenza_toeletta_giorni}
+                      onChange={e => setEditForm(p=>({...p, frequenza_toeletta_giorni: e.target.value}))}
+                      style={{...inputStyle, width:80, textAlign:'center'}}
+                      placeholder="—"
+                    />
+                    <span style={{fontSize:13, color:'var(--text-secondary)'}}>giorni</span>
+                    {editForm.frequenza_toeletta_giorni && (
+                      <span style={{fontSize:12, color:'var(--text-muted)'}}>
+                        (circa ogni {Math.round(editForm.frequenza_toeletta_giorni / 7 * 10) / 10} settimane)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{fontSize:11, color:'var(--text-muted)', marginTop:4}}>
+                    Lascia vuoto per calcolo automatico dallo storico
+                  </div>
                 </div>
 
                 <div>

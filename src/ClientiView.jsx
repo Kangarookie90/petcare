@@ -112,10 +112,16 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
     problemi_salute: '', problemi_carattere: '', note: '',
     operatore_preferito_id: '',
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState('');
+  const [razzaQuery,  setRazzaQuery]  = useState('');
+  const [razzaOpen,   setRazzaOpen]   = useState(false);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const razzeFiltered = razze.filter(r => r.specie === f.specie);
+  const razzeSuggerite = razzeFiltered.filter(r =>
+    r.nome.toLowerCase().includes(razzaQuery.toLowerCase())
+  );
+  const razzaSelezionata = razzeFiltered.find(r => r.id === f.razza_id);
 
   const save = async () => {
     if (!f.nome.trim()) { setError("Inserisci il nome dell'animale"); return; }
@@ -160,7 +166,7 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
         <div style={secLabel}>Specie</div>
         <div style={{ display: 'flex', gap: 8 }}>
           {['cane', 'gatto', 'altro'].map(s => (
-            <button key={s} onClick={() => { set('specie', s); set('razza_id', ''); }} style={{
+            <button key={s} onClick={() => { set('specie', s); set('razza_id', ''); setRazzaQuery(''); }} style={{
               flex: 1, padding: '9px', borderRadius: 12, cursor: 'pointer',
               fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
               border: '1px solid rgba(255,255,255,0.8)',
@@ -174,14 +180,80 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
         </div>
       </div>
 
-      {/* Razza */}
+      {/* Razza — ricerca testuale con dropdown */}
       {razzeFiltered.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 14, position: 'relative' }}>
           <div style={secLabel}>Razza</div>
-          <select value={f.razza_id} onChange={e => set('razza_id', e.target.value)} style={inputStyle}>
-            <option value="">Seleziona razza...</option>
-            {razzeFiltered.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
-          </select>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Cerca razza..."
+              value={razzaQuery || (razzaSelezionata ? razzaSelezionata.nome : '')}
+              onFocus={() => { setRazzaOpen(true); setRazzaQuery(''); }}
+              onBlur={() => setTimeout(() => setRazzaOpen(false), 150)}
+              onChange={e => { setRazzaQuery(e.target.value); set('razza_id', ''); setRazzaOpen(true); }}
+              style={{ ...inputStyle, paddingRight: 32 }}
+            />
+            {/* Icona chevron */}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="var(--text-muted)" strokeWidth="2.2" strokeLinecap="round"
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+          {/* Dropdown risultati */}
+          {razzaOpen && razzeSuggerite.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+              background: 'var(--card-bg)',
+              border: '1px solid var(--card-border)',
+              borderRadius: 14, marginTop: 4,
+              boxShadow: '0 8px 24px rgba(8,20,80,0.14)',
+              maxHeight: 220, overflowY: 'auto',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+            }}>
+              {/* Opzione "nessuna razza" */}
+              <div
+                onMouseDown={() => { set('razza_id', ''); setRazzaQuery(''); setRazzaOpen(false); }}
+                style={{
+                  padding: '10px 14px', fontSize: 13, cursor: 'pointer',
+                  color: 'var(--text-muted)', fontStyle: 'italic',
+                  borderBottom: '1px solid var(--card-border-sm)',
+                }}
+              >
+                Nessuna / non specificata
+              </div>
+              {razzeSuggerite.map(r => (
+                <div
+                  key={r.id}
+                  onMouseDown={() => { set('razza_id', r.id); setRazzaQuery(''); setRazzaOpen(false); }}
+                  style={{
+                    padding: '10px 14px', fontSize: 13, cursor: 'pointer',
+                    fontWeight: f.razza_id === r.id ? 700 : 400,
+                    color: f.razza_id === r.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    background: f.razza_id === r.id ? 'rgba(37,99,235,0.07)' : 'transparent',
+                    borderBottom: '1px solid var(--card-border-sm)',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--card-bg-sm)'}
+                  onMouseLeave={e => e.currentTarget.style.background = f.razza_id === r.id ? 'rgba(37,99,235,0.07)' : 'transparent'}
+                >
+                  {r.nome}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Nessun risultato */}
+          {razzaOpen && razzaQuery && razzeSuggerite.length === 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+              background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+              borderRadius: 14, marginTop: 4, padding: '12px 14px',
+              fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic',
+            }}>
+              Nessuna razza trovata per "{razzaQuery}"
+            </div>
+          )}
         </div>
       )}
 

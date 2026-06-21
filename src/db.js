@@ -114,4 +114,24 @@ db.version(7).stores({
   _sync:                 'chiave',
 });
 
+// ── v9: recall — frequenza toeletta e prossima visita su animali ─
+// Aggiunge prossima_visita_attesa come indice per query offline
+// "chi scade questa settimana". frequenza_toeletta_giorni è un dato
+// — non serve come indice, viene letto direttamente dal record.
+db.version(9).stores({
+  clienti:               'id, cognome, nome, created_at',
+  animali:               'id, cliente_id, nome, specie, prossima_visita_attesa',
+  operatori:             'id, nome, attivo, ruolo',
+  servizi:               'id, nome',
+  razze:                 'id, nome, specie',
+  appuntamenti:          'id, inizio, fine, stato, cliente_id, animale_id, operatore_id',
+  primanota:             'id, data, appuntamento_id, operatore_id, tipo',
+  appuntamenti_servizi:  'id, appuntamento_id, servizio_id',
+  appuntamenti_animali:  'id, appuntamento_id, animale_id',
+  notifiche:             'id, tipo, appuntamento_id, animale_id, cliente_id, letto, created_at',
+  lista_attesa:          'id, cliente_id, animale_id, operatore_id, stato, priorita, created_at',
+  _coda:                 '++id, tabella, action, created_at',
+  _sync:                 'chiave',
+});
+
 export default db;
