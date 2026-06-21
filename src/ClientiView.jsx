@@ -980,7 +980,7 @@ export default function ClientiView({ onNavigateToPet, initialClienteId, onClien
 
   const handleClienteSaved = (c) => {
     setClienti(prev => [...prev, { ...c, animali_count: c.animali_count || 0 }]
-      .sort((a, b) => a.cognome.localeCompare(b.cognome)));
+      .sort((a, b) => (a.cognome || a.nome || '').localeCompare(b.cognome || b.nome || '')));
   };
 
   const handleClienteUpdate = (c) => {
