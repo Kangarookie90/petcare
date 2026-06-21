@@ -542,8 +542,15 @@ const TABS_ADMIN = [
 export default function ImpostazioniView({ initialTab, role }) {
   const isAdmin = role === 'admin';
 
-  // L'operatore atterra sempre su profilo; l'admin sull'ultima tab visitata (o operatori)
-  const [tab, setTab] = useState(isAdmin ? (initialTab || 'operatori') : 'profilo');
+  // Tab: non inizializzare da isAdmin (potrebbe essere ancora null al mount)
+  // Partiamo sempre da 'operatori' e lasciamo che tabAttiva faccia il filtro
+  const [tab, setTab] = useState(initialTab || 'operatori');
+
+  // Quando isAdmin diventa true (dopo verifica DB), aggiorna tab se serve
+  useEffect(() => {
+    if (!isAdmin) setTab('profilo');
+    else if (tab === 'profilo') setTab(initialTab || 'operatori');
+  }, [isAdmin]);
 
   // Tab effettivamente mostrata — l'operatore è bloccato su profilo
   const tabAttiva = isAdmin ? tab : 'profilo';

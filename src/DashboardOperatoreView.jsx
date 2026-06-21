@@ -32,6 +32,9 @@ const STATI_COLORI = {
 const fmtOra = d => new Date(d).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
 
 export default function DashboardOperatoreView({ role, session }) {
+  // role può essere null mentre roleVerificato è ancora in caricamento da DB
+  // Aspettiamo che sia definito prima di prendere decisioni
+  const roleDefinito = role !== null && role !== undefined;
   const isAdmin = role === 'admin';
 
   const [operatori,     setOperatori]     = useState([]);
@@ -50,6 +53,7 @@ export default function DashboardOperatoreView({ role, session }) {
   // Dipende da session e isAdmin — entrambi arrivano dopo il mount iniziale
   useEffect(() => {
     if (!session?.user?.email) return; // sessione non ancora disponibile
+    if (!roleDefinito) return;         // ruolo non ancora verificato da DB
     supabase.from('operatori').select('id,nome,cognome,colore,email').eq('attivo', true).order('nome')
       .then(({ data }) => {
         const lista = data || [];
@@ -62,7 +66,7 @@ export default function DashboardOperatoreView({ role, session }) {
           if (proprio) setOpSel(proprio);
         }
       });
-  }, [session, isAdmin]);
+  }, [session, isAdmin, roleDefinito]);
 
   // Carica appuntamenti del giorno + orari + dati saturazione
   useEffect(() => {
@@ -169,6 +173,20 @@ export default function DashboardOperatoreView({ role, session }) {
     // L'operatore non dovrebbe mai arrivare qui (auto-selezione al mount).
     // Se ci arriva significa che la sua email non è in tabella operatori.
     if (!isAdmin) {
+      // Se role non è ancora definito, mostra loading invece del messaggio di errore
+      if (!roleDefinito) {
+        return (
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+            style={{ padding:'0 0 2rem', width:'100%' }}>
+            <div style={{ ...glass, padding:'32px 24px', textAlign:'center' }}>
+              <div style={{ width:32, height:32, borderRadius:'50%', margin:'0 auto 12px',
+                border:'3px solid rgba(37,99,235,0.2)', borderTopColor:'#2563eb',
+                animation:'spin 0.7s linear infinite' }} />
+              <p style={{ margin:0, fontSize:13, color:'var(--text-secondary)' }}>Caricamento...</p>
+            </div>
+          </motion.div>
+        );
+      }
       return (
         <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
           style={{ padding:'0 0 2rem', width:'100%' }}>
