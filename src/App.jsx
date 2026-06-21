@@ -519,7 +519,9 @@ export default function App() {
       .then(({ data }) => {
         const ruoloMetadata = session.user.user_metadata?.role ?? 'operatore';
         const ruoloDb       = data?.ruolo ?? 'operatore';
-        const ruoloFinale   = (ruoloMetadata === 'admin' && ruoloDb === 'admin') ? 'admin' : 'operatore';
+        // Admin se almeno una delle due fonti lo conferma
+        // (evita il lock-out se le due fonti sono temporaneamente disallineate)
+        const ruoloFinale   = (ruoloMetadata === 'admin' || ruoloDb === 'admin') ? 'admin' : 'operatore';
         if (ruoloMetadata !== ruoloDb) {
           console.warn('[Auth] Ruolo divergente — metadata:', ruoloMetadata, '/ DB:', ruoloDb, '→ uso:', ruoloFinale);
         }
