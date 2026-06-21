@@ -47,18 +47,22 @@ export default function DashboardOperatoreView({ role, session }) {
   const timerRef = useRef(null);
 
   // Carica operatori e, se non admin, auto-seleziona il proprio record
+  // Dipende da session e isAdmin — entrambi arrivano dopo il mount iniziale
   useEffect(() => {
+    if (!session?.user?.email) return; // sessione non ancora disponibile
     supabase.from('operatori').select('id,nome,cognome,colore,email').eq('attivo', true).order('nome')
       .then(({ data }) => {
         const lista = data || [];
         setOperatori(lista);
-        // L'operatore salta la schermata di selezione: auto-seleziona sé stesso
+        // Auto-seleziona sempre l'operatore loggato:
+        // - se è admin: mostra la schermata di selezione (opSel rimane null)
+        // - se è operatore: selezione automatica sul proprio record
         if (!isAdmin && session?.user?.email) {
           const proprio = lista.find(op => op.email === session.user.email);
           if (proprio) setOpSel(proprio);
         }
       });
-  }, []);
+  }, [session, isAdmin]);
 
   // Carica appuntamenti del giorno + orari + dati saturazione
   useEffect(() => {
