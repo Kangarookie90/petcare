@@ -1035,7 +1035,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                       onChange={e => { set('prezzo_confermato', e.target.value); set('prezzo_confermato_flag', false); }}
                       style={{ ...inputStyle, paddingLeft: 26, borderColor: f.prezzo_confermato_flag ? 'rgba(5,150,105,0.4)' : 'var(--card-border)' }} />
                   </div>
-                  <button onClick={() => { const val = f.prezzo_confermato || f.prezzo_proposto; set('prezzo_confermato', val); set('prezzo_confermato_flag', true); }}
+                  <button onClick={() => { const val = f.prezzo_confermato || f.prezzo_proposto; set('prezzo_confermato', val); set('prezzo_confermato_flag', true); set('stato', 'completato'); }}
                     style={{ padding: '10px 16px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, border: 'none',
                       background: f.prezzo_confermato_flag ? 'linear-gradient(145deg,#34d399,#059669)' : 'linear-gradient(145deg,#fbbf24,#d97706)',
                       color: '#fff', whiteSpace: 'nowrap',
