@@ -39,9 +39,4 @@
     "globals": "^17.4.0",
     "vite": "^8.0.0"
   }
-"scripts": {
-  "prebuild": "node scripts/bump-version.js",
-  "build": "vite build",
-  ...
-}
 }
