@@ -5,6 +5,9 @@ import App from './App.jsx'
 import { inizializzaSync } from './syncService.js'
 import { Analytics } from '@vercel/analytics/react'
 import { registerSW } from 'virtual:pwa-register'
+import { APP_VERSION, BUILD_DATE } from './version.js'
+
+console.log(`[Nemora] v${APP_VERSION} · build ${BUILD_DATE}`);
 
 // Avvia sync all'avvio dell'app
 inizializzaSync();

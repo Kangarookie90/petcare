@@ -16,6 +16,7 @@ import { supabase } from './supabaseClient';
 import * as XLSX from 'xlsx';
 import OperatoriView from './OperatoriView';
 import ProfiloView   from './ProfiloView';
+import { APP_VERSION, BUILD_DATE } from './version';
 
 // ── Stili condivisi ───────────────────────────────────────────
 const glass = {
@@ -632,6 +633,14 @@ export default function ImpostazioniView({ initialTab, role }) {
           {renderTab()}
         </motion.div>
       </AnimatePresence>
+
+      {/* Versione app — sempre visibile, utile per supporto/debug */}
+      <p style={{
+        textAlign: 'center', margin: '28px 0 0',
+        fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.2px',
+      }}>
+        Nemora v{APP_VERSION} · {BUILD_DATE}
+      </p>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
