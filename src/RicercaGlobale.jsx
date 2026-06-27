@@ -267,17 +267,8 @@ export default function RicercaGlobale({ onClose, onNavigate }) {
         .ilike('nome', like)
         .limit(MAX_PER_CAT),
 
-      // Appuntamenti: cerca per nome animale o cliente su storico completo
-      supabase
-        .from('appuntamenti')
-        .select(`
-          id, inizio, stato,
-          clienti(id, nome, cognome),
-          animali(id, nome, specie),
-          operatori(nome, colore)
-        `)
-        .order('inizio', { ascending: false })
-        .limit(50), // limit generoso, filtro client-side sotto
+      // Appuntamenti: RPC server-side su storico completo
+      supabase.rpc('search_appuntamenti', { q: q.trim() }),
     ]);
 
     // Arricchisci clienti con conteggio animali
@@ -290,15 +281,15 @@ export default function RicercaGlobale({ onClose, onNavigate }) {
       });
     }
 
-    // Filtra appuntamenti client-side (join .or non sempre supportato da PostgREST)
-    const ql = q.toLowerCase();
-    const apFiltrati = (appRes.data || [])
-      .filter(ap => {
-        const nc = `${ap.clienti?.cognome || ''} ${ap.clienti?.nome || ''}`.toLowerCase();
-        const na = (ap.animali?.nome || '').toLowerCase();
-        return nc.includes(ql) || na.includes(ql);
-      })
-      .slice(0, MAX_PER_CAT);
+    // Normalizza risultati RPC nel formato atteso da buildItems
+    const apFiltrati = (appRes.data || []).map(ap => ({
+      id:         ap.id,
+      inizio:     ap.inizio,
+      stato:      ap.stato,
+      clienti:    { id: ap.cliente_id, nome: ap.cliente_nome, cognome: ap.cliente_cognome },
+      animali:    { id: ap.animale_id, nome: ap.animale_nome, specie: ap.animale_specie },
+      operatori:  { nome: ap.operatore_nome, colore: ap.operatore_colore },
+    }));
 
     setRisultati({ clienti, animali: animaliRes.data || [], appuntamenti: apFiltrati });
     setFocusIdx(0);
