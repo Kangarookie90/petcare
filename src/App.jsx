@@ -6,6 +6,7 @@ import { inizializzaSync } from './syncService';
 import LoginView from './LoginView';
 import OfflineIndicator from './OfflineIndicator';
 import BriefingMattutino from './BriefingMattutino';
+import UpdateBanner from './UpdateBanner';
 
 // ── Code splitting: carica ogni view solo quando viene visitata ──
 const PetView                = lazy(() => import('./PetView'));
@@ -1273,7 +1274,7 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-
+        <UpdateBanner />
      <OfflineIndicator />
     </>
   );
