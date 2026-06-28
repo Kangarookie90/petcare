@@ -2,7 +2,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from './supabaseClient';
 import { APP_VERSION, BUILD_DATE } from './version';
-import { inizializzaSync } from './syncService';
+import { inizializzaSync, setSaloneAttivo, getRuoloLocale } from './syncService';
 import LoginView from './LoginView';
 import OfflineIndicator from './OfflineIndicator';
 import BriefingMattutino from './BriefingMattutino';
@@ -486,6 +486,7 @@ export default function App() {
   const [showEasterEgg,  setShowEasterEgg]  = useState(false);
   const [session,        setSession]        = useState(undefined);
   const [roleVerificato, setRoleVerificato] = useState(null);
+  const [saloneId,       setSaloneId]       = useState(null);
 
   // ── Notifiche: DEVE stare qui, prima di qualsiasi return condizionale ──
   const { notifiche, nonLette, nuovaToast, marcaLette } = useNotifiche();
@@ -509,27 +510,33 @@ export default function App() {
     if (session) inizializzaSync();
   }, [session]);
 
-  // ── Verifica ruolo da DB (fonte server-side) ──────────────
+  // ── Verifica ruolo da utenti_salone (unica fonte di verità) ──
   useEffect(() => {
-    if (!session?.user?.email) { setRoleVerificato(null); return; }
+    if (!session?.user?.id) { setRoleVerificato(null); setSaloneId(null); return; }
+
     supabase
-      .from('operatori')
-      .select('ruolo')
-      .eq('email', session.user.email)
+      .from('utenti_salone')
+      .select('salone_id, ruolo, operatore_id')
+      .eq('user_id', session.user.id)
       .maybeSingle()
-      .then(({ data }) => {
-        const ruoloMetadata = session.user.user_metadata?.role ?? 'operatore';
-        const ruoloDb       = data?.ruolo ?? 'operatore';
-        // Admin se almeno una delle due fonti lo conferma
-        // (evita il lock-out se le due fonti sono temporaneamente disallineate)
-        const ruoloFinale   = (ruoloMetadata === 'admin' || ruoloDb === 'admin') ? 'admin' : 'operatore';
-        if (ruoloMetadata !== ruoloDb) {
-          console.warn('[Auth] Ruolo divergente — metadata:', ruoloMetadata, '/ DB:', ruoloDb, '→ uso:', ruoloFinale);
+      .then(async ({ data, error }) => {
+        if (error || !data) {
+          console.error('[Auth] utenti_salone non trovato per user_id:', session.user.id, error);
+          setRoleVerificato('operatore');
+          return;
         }
-        setRoleVerificato(ruoloFinale);
+        const { salone_id, ruolo } = data;
+        setRoleVerificato(ruolo);
+        setSaloneId(salone_id);
+        // Persiste in _meta per syncService (usato offline)
+        await setSaloneAttivo({ salone_id, ruolo });
       })
-      .catch(() => setRoleVerificato(session.user.user_metadata?.role ?? 'operatore'));
-  }, [session?.user?.email]);
+      .catch(async () => {
+        // Fallback offline: legge da _meta locale
+        const ruoloLocale = await getRuoloLocale();
+        setRoleVerificato(ruoloLocale);
+      });
+  }, [session?.user?.id]);
 
   // Cmd+K / Ctrl+K apre la ricerca globale
   useEffect(() => {
@@ -576,9 +583,9 @@ export default function App() {
     );
   }
 
-  // ── Ruolo utente — default a 'operatore' se non impostato (sicuro by default) ──
-  const role    = roleVerificato ?? session?.user?.user_metadata?.role ?? 'operatore';
-  const isAdmin = role === 'admin';
+  // ── Ruolo utente — da utenti_salone (server-side), default sicuro 'operatore' ──
+  const role    = roleVerificato ?? 'operatore';
+  const isAdmin = role === 'admin' || role === 'owner';
 
   // ── Viste accessibili per ruolo ──────────────────────────────
   const VISTE_ADMIN_ONLY = ['social'];

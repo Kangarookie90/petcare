@@ -154,4 +154,27 @@ db.version(9).stores({
   _sync:                 'chiave',
 });
 
+// ── v10: salone_id su tutte le tabelle operative + utenti_salone in cache ─
+// salone_id è indicizzato su tutte le tabelle per filtrare offline.
+// utenti_salone: cache locale del pivot auth↔salone (ruolo incluso).
+// _meta: store chiave-valore per dati di sessione (salone_id attivo, ruolo).
+db.version(10).stores({
+  clienti:               'id, cognome, nome, created_at, salone_id',
+  animali:               'id, cliente_id, nome, specie, prossima_visita_attesa, salone_id',
+  operatori:             'id, nome, attivo, ruolo, salone_id',
+  servizi:               'id, nome, salone_id',
+  razze:                 'id, nome, specie, salone_id',
+  appuntamenti:          'id, inizio, fine, stato, cliente_id, animale_id, operatore_id, salone_id',
+  primanota:             'id, data, appuntamento_id, operatore_id, tipo, salone_id',
+  appuntamenti_servizi:  'id, appuntamento_id, servizio_id, salone_id',
+  appuntamenti_animali:  'id, appuntamento_id, animale_id, salone_id',
+  notifiche:             'id, tipo, appuntamento_id, animale_id, cliente_id, letto, created_at, salone_id',
+  lista_attesa:          'id, cliente_id, animale_id, operatore_id, stato, priorita, created_at, salone_id',
+  operatori_orari:       'id, operatore_id, giorno_settimana, salone_id',
+  utenti_salone:         'id, salone_id, user_id, ruolo',
+  _coda:                 '++id, tabella, action, created_at',
+  _sync:                 'chiave',
+  _meta:                 'chiave',
+});
+
 export default db;

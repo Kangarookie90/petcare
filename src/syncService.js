@@ -10,6 +10,11 @@
  * Tabelle sincronizzate:
  *   clienti, animali, operatori, servizi, razze,
  *   appuntamenti, primanota, appuntamenti_servizi, notifiche, lista_attesa, operatori_orari
+ *
+ * v2 — multi-salone:
+ *   - syncAll() richiede salone_id (caricato da _meta)
+ *   - inserisci() inietta automaticamente salone_id su ogni record
+ *   - utenti_salone sincronizzata in cache locale (readonly)
  */
 
 import { supabase } from './supabaseClient';
@@ -22,15 +27,13 @@ const TABELLE = ['clienti', 'animali', 'operatori', 'servizi', 'razze', 'appunta
 const SELECT_MAP = {
   animali:              '*, razze(id, nome), clienti(id, nome, cognome)',
   appuntamenti:         '*, clienti(id, nome, cognome), animali(id, nome, specie, problemi_carattere, problemi_salute), operatori(id, nome, cognome, colore)',
-  appuntamenti_animali: 'id, appuntamento_id, animale_id, animali(id, nome, specie, problemi_carattere, problemi_salute)',
-  notifiche:            'id, tipo, appuntamento_id, animale_id, cliente_id, messaggio, telefono_cliente, letto, created_at',
+  appuntamenti_animali: 'id, appuntamento_id, animale_id, salone_id, animali(id, nome, specie, problemi_carattere, problemi_salute)',
+  notifiche:            'id, tipo, appuntamento_id, animale_id, cliente_id, messaggio, telefono_cliente, letto, created_at, salone_id',
   lista_attesa:         '*, clienti(id, nome, cognome, telefono), animali(id, nome, specie), operatori(id, nome, colore)',
 };
 
 // ── Finestre temporali per tabelle grandi ─────────────────────
-// Scarica solo i dati recenti per limitare payload su mobile.
-// I dati più vecchi restano in IndexedDB da sync precedenti (bulkPut = merge).
-const MESI_6  = 6;
+const MESI_6   = 6;
 const GIORNI_30 = 30;
 
 function finestraISO(mesi = 6) {
@@ -48,12 +51,11 @@ function finestraGiorni(giorni = 30) {
   return d.toISOString();
 }
 
-// Filtro temporale per tabella (null = nessun filtro, scarica tutto)
 const FILTRO_TEMPORALE = {
-  appuntamenti:         { campo: 'inizio', da: () => finestraISO(MESI_6) },
-  primanota:            { campo: 'data',   da: () => finestraISO(MESI_6).slice(0, 10) },
-  appuntamenti_servizi: null, // piccola, nessun filtro
-  appuntamenti_animali: null, // piccola, nessun filtro
+  appuntamenti:         { campo: 'inizio',     da: () => finestraISO(MESI_6) },
+  primanota:            { campo: 'data',        da: () => finestraISO(MESI_6).slice(0, 10) },
+  appuntamenti_servizi: null,
+  appuntamenti_animali: null,
   notifiche:            { campo: 'created_at', da: () => finestraGiorni(GIORNI_30) },
 };
 
@@ -61,8 +63,6 @@ const FILTRO_TEMPORALE = {
 const TABELLE_READONLY = new Set(['notifiche']);
 
 // ── Tabelle che usano merge invece di clear+bulkPut ───────────
-// - lista_attesa: delta sync per evitare flash UI
-// - tabelle con limit temporale: non cancelliamo i record storici già in cache
 const TABELLE_MERGE = new Set(['lista_attesa', 'appuntamenti', 'primanota', 'notifiche']);
 
 // ── Stato connettività ────────────────────────────────────────
@@ -85,6 +85,30 @@ function tempId() {
   return 'offline_' + Date.now() + '_' + Math.random().toString(36).slice(2);
 }
 
+// ── salone_id attivo ─────────────────────────────────────────
+// Caricato da _meta all'avvio, aggiornato da setSaloneAttivo().
+let _saloneId = null;
+
+export async function getSaloneId() {
+  if (_saloneId) return _saloneId;
+  const meta = await db._meta.get('salone_id');
+  _saloneId = meta?.valore ?? null;
+  return _saloneId;
+}
+
+export async function setSaloneAttivo({ salone_id, ruolo }) {
+  _saloneId = salone_id;
+  await db._meta.put({ chiave: 'salone_id', valore: salone_id });
+  await db._meta.put({ chiave: 'ruolo',     valore: ruolo });
+  // Forza re-sync con il nuovo salone
+  await db._sync.delete('ultimo_sync');
+}
+
+export async function getRuoloLocale() {
+  const meta = await db._meta.get('ruolo');
+  return meta?.valore ?? 'operatore';
+}
+
 // ── Flag anti-sync-paralleli ──────────────────────────────────
 let _syncInProgress = false;
 
@@ -92,26 +116,41 @@ let _syncInProgress = false;
 const _ultimoSyncPerTabella = new Map();
 const DEBOUNCE_LEGGI_MS = 60_000;
 
+// ── Sync utenti_salone (cache locale del pivot ruoli) ─────────
+async function syncUtentiSalone() {
+  try {
+    const { data, error } = await supabase.from('utenti_salone').select('*');
+    if (error || !data) return;
+    await db.transaction('rw', db.utenti_salone, async () => {
+      await db.utenti_salone.clear();
+      await db.utenti_salone.bulkPut(data);
+    });
+  } catch (e) {
+    console.error('[Sync] utenti_salone:', e);
+  }
+}
+
 // ── Sync completo ─────────────────────────────────────────────
 export async function syncAll() {
   if (!isOnline) return;
-  if (_syncInProgress) { console.log('[PetCare Sync] Sync già in corso, skip.'); return; }
+  if (_syncInProgress) { console.log('[Sync] Sync già in corso, skip.'); return; }
   _syncInProgress = true;
-  console.log('[PetCare Sync] Avvio sincronizzazione...');
+  console.log('[Sync] Avvio sincronizzazione...');
   try {
     await flushCoda();
+    await syncUtentiSalone();
     await Promise.all(TABELLE.map(t => syncTabella(t, SELECT_MAP[t] || '*')));
     await db._sync.put({ chiave: 'ultimo_sync', valore: new Date().toISOString() });
-    console.log('[PetCare Sync] Completato');
+    console.log('[Sync] Completato');
   } finally {
     _syncInProgress = false;
   }
 }
 
 // ── Sync singola tabella ──────────────────────────────────────
+// RLS filtra automaticamente per salone — non serve passare salone_id nella query.
 async function syncTabella(tabella, select) {
   try {
-    // Applica filtro temporale se configurato
     let query = supabase.from(tabella).select(select);
     const filtro = FILTRO_TEMPORALE[tabella];
     if (filtro) {
@@ -123,10 +162,8 @@ async function syncTabella(tabella, select) {
     if (!data) return;
 
     if (TABELLE_MERGE.has(tabella)) {
-      // Merge: bulkPut senza clear — preserva record storici già in cache
       await db[tabella].bulkPut(data);
     } else {
-      // Atomico: clear + bulkPut in transazione Dexie
       await db.transaction('rw', db[tabella], async () => {
         await db[tabella].clear();
         await db[tabella].bulkPut(data);
@@ -143,7 +180,7 @@ async function syncTabella(tabella, select) {
 async function flushCoda() {
   const coda = await db._coda.orderBy('id').toArray();
   if (coda.length === 0) return;
-  console.log(`[PetCare Sync] ${coda.length} mutazioni da inviare`);
+  console.log(`[Sync] ${coda.length} mutazioni da inviare`);
   for (const item of coda) {
     try {
       let ok = false;
@@ -197,14 +234,18 @@ export async function leggi(tabella, { filtri = {}, ordine = null } = {}) {
 }
 
 export async function inserisci(tabella, payload) {
+  // Inietta salone_id automaticamente su ogni insert
+  const saloneId = await getSaloneId();
+  const payloadCompleto = saloneId ? { salone_id: saloneId, ...payload } : payload;
+
   if (isOnline) {
-    const { data, error } = await supabase.from(tabella).insert([payload]).select().single();
+    const { data, error } = await supabase.from(tabella).insert([payloadCompleto]).select().single();
     if (error) throw error;
     await db[tabella].put(data);
     return data;
   } else {
     const idLocale = tempId();
-    const recordLocale = { ...payload, id: idLocale, _id_locale: idLocale, _offline: true };
+    const recordLocale = { ...payloadCompleto, id: idLocale, _id_locale: idLocale, _offline: true };
     await db[tabella].put(recordLocale);
     await db._coda.add({ tabella, action: 'insert', payload: recordLocale, created_at: new Date().toISOString() });
     return recordLocale;
