@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
+import { getSaloneId } from './syncService';
 
 // ── Stili ─────────────────────────────────────────────────────
 const glass = {
@@ -116,6 +117,22 @@ function SeletoreColore({ value, onChange }) {
   );
 }
 
+// ── Helper: salva orari per operatore appena creato ──────────
+async function salvaOrariIniziali(operatoreId, orari) {
+  const saloneId = await getSaloneId();
+  const attivi = orari.filter(o => o.attivo);
+  if (attivi.length === 0) return;
+  const payload = attivi.map(o => ({
+    operatore_id:     operatoreId,
+    giorno_settimana: o.giorno_settimana,
+    ora_inizio:       o.ora_inizio,
+    ora_fine:         o.ora_fine,
+    attivo:           true,
+    salone_id:        saloneId,
+  }));
+  await supabase.from('operatori_orari').insert(payload);
+}
+
 // ── Modal Nuovo / Modifica Operatore ──────────────────────────
 function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
   const isEdit = !!operatore;
@@ -135,6 +152,18 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
   const [fotoError,     setFotoError]     = useState('');
   const fotoInputRef = useRef(null);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  // Orari lavorativi per il nuovo operatore (Lun-Ven attivi di default)
+  const [orariNuovo, setOrariNuovo] = useState(
+    Array.from({ length: 7 }, (_, g) => ({
+      giorno_settimana: g,
+      ora_inizio: '09:00',
+      ora_fine:   '18:00',
+      attivo:     g >= 1 && g <= 5,
+    }))
+  );
+  const updateOrarioNuovo = (g, campo, val) =>
+    setOrariNuovo(prev => prev.map((r, i) => i === g ? { ...r, [campo]: val } : r));
 
   // Carica signed URL foto esistente
   useEffect(() => {
@@ -218,11 +247,20 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
     if (isEdit) {
       result = await supabase.from('operatori').update(payload).eq('id', operatore.id).select().single();
     } else {
-      result = await supabase.from('operatori').insert([payload]).select().single();
+      // Inietta salone_id — obbligatorio per RLS
+      const saloneId = await getSaloneId();
+      if (!saloneId) { setError('Salone non trovato — ricarica la pagina'); setLoading(false); return; }
+      result = await supabase.from('operatori').insert([{ ...payload, salone_id: saloneId }]).select().single();
     }
 
     setLoading(false);
     if (result.error) { setError(result.error.message); return; }
+
+    // Se nuovo operatore, salva anche gli orari iniziali
+    if (!isEdit && result.data?.id) {
+      await salvaOrariIniziali(result.data.id, orariNuovo);
+    }
+
     onSaved(result.data);
     onClose();
   };
@@ -396,6 +434,70 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
           </button>
         </div>
 
+        {/* Selettore orari lavorativi — solo per nuovo operatore */}
+        {!isEdit && (
+          <div style={{ marginTop: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+              Orari lavorativi
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {orariNuovo.map((o, g) => {
+                const GIORNI_S = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+                return (
+                  <div key={g} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 10px', borderRadius: 12,
+                    background: o.attivo ? 'var(--card-bg-sm)' : 'transparent',
+                    border: `1px solid ${o.attivo ? 'var(--card-border-sm)' : 'transparent'}`,
+                    opacity: o.attivo ? 1 : 0.5, transition: 'all 0.15s',
+                  }}>
+                    <button onClick={() => updateOrarioNuovo(g, 'attivo', !o.attivo)}
+                      style={{
+                        width: 34, height: 20, borderRadius: 99, flexShrink: 0,
+                        background: o.attivo ? (f.colore || '#2563eb') : 'var(--card-border)',
+                        border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.18s',
+                      }}>
+                      <motion.div
+                        animate={{ x: o.attivo ? 16 : 2 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        style={{ position: 'absolute', top: 2, width: 16, height: 16,
+                          borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}
+                      />
+                    </button>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 32 }}>
+                      {GIORNI_S[g]}
+                    </span>
+                    {o.attivo ? (
+                      <>
+                        <input type="time" value={o.ora_inizio}
+                          onChange={e => updateOrarioNuovo(g, 'ora_inizio', e.target.value)}
+                          style={{ ...inputStyle, flex: 1, padding: '5px 8px', fontSize: 13, minWidth: 0, textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>→</span>
+                        <input type="time" value={o.ora_fine}
+                          onChange={e => updateOrarioNuovo(g, 'ora_fine', e.target.value)}
+                          style={{ ...inputStyle, flex: 1, padding: '5px 8px', fontSize: 13, minWidth: 0, textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, minWidth: 30, textAlign: 'right' }}>
+                          {(() => {
+                            const [hi, mi] = o.ora_inizio.split(':').map(Number);
+                            const [hf, mf] = o.ora_fine.split(':').map(Number);
+                            const tot = Math.max(0, (hf*60+mf)-(hi*60+mi));
+                            return tot > 0 ? `${Math.floor(tot/60)}h${tot%60>0?tot%60+'m':''}` : '';
+                          })()}
+                        </span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Riposo</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {error && (
           <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 12,
             padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 10 }}>
@@ -489,7 +591,8 @@ function OrariOperatore({ operatore }) {
         if (o._id) {
           await supabase.from('operatori_orari').update(payload).eq('id', o._id);
         } else {
-          const { data } = await supabase.from('operatori_orari').insert(payload).select().single();
+          const saloneId = await getSaloneId();
+          const { data } = await supabase.from('operatori_orari').insert({ ...payload, salone_id: saloneId }).select().single();
           if (data) {
             setOrari(prev => prev.map((r, i) =>
               i === o.giorno_settimana ? { ...r, _id: data.id } : r
