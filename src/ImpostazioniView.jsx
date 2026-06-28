@@ -541,7 +541,7 @@ const TABS_ADMIN = [
 ];
 
 export default function ImpostazioniView({ initialTab, role }) {
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || role === 'owner';
 
   // Tab: non inizializzare da isAdmin (potrebbe essere ancora null al mount)
   // Partiamo sempre da 'operatori' e lasciamo che tabAttiva faccia il filtro

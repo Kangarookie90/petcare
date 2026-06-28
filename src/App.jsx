@@ -583,8 +583,26 @@ export default function App() {
     );
   }
 
-  // ── Ruolo utente — da utenti_salone (server-side), default sicuro 'operatore' ──
-  const role    = roleVerificato ?? 'operatore';
+  // ── Attendi verifica ruolo prima di renderizzare le view ────
+  // Evita il flash "operatore" mentre la query su utenti_salone è in volo.
+  if (roleVerificato === null) {
+    return (
+      <>
+        <div className="app-bg" />
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(37,99,235,0.6)" strokeWidth="2.5" strokeLinecap="round"
+            style={{ animation: 'spin 0.8s linear infinite' }}>
+            <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.3"/>
+            <path d="M21 12a9 9 0 00-9-9"/>
+          </svg>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </>
+    );
+  }
+
+  // ── Ruolo utente — da utenti_salone (server-side), mai da user_metadata ──
+  const role    = roleVerificato;
   const isAdmin = role === 'admin' || role === 'owner';
 
   // ── Viste accessibili per ruolo ──────────────────────────────
