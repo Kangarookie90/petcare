@@ -1230,9 +1230,11 @@ export default function App() {
             onClick={() => setShowEasterEgg(false)}
             style={{
               position: 'fixed', inset: 0, zIndex: 500,
-              background: 'rgba(0,0,0,0.4)',
+              background: 'rgba(0,0,0,0.55)',
               backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+              padding: '24px 16px',
+              overflowY: 'auto',
             }}
           >
             <motion.div
@@ -1243,25 +1245,26 @@ export default function App() {
               onClick={e => e.stopPropagation()}
               style={{
                 width: '100%', maxWidth: 400,
-                background: 'rgba(255,255,255,0.72)',
-                border: '1px solid rgba(255,255,255,0.9)',
-                borderRadius: 28, padding: '36px 32px 32px',
-                boxShadow: '0 2px 0 rgba(255,255,255,0.95) inset, 0 20px 60px rgba(0,0,0,0.18)',
-                backdropFilter: 'blur(40px) saturate(1.8)', WebkitBackdropFilter: 'blur(40px) saturate(1.8)',
+                margin: 'auto',
+                borderRadius: 28, padding: '36px 28px 28px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                // Sfondo e testo hardcoded — indipendenti dal tema
+                background: '#1a2744',
+                border: '1px solid rgba(255,255,255,0.1)',
               }}
             >
               <div style={{ textAlign: 'center', marginBottom: 20 }}>
                 <img src="/assets/nemora-icon-1024.svg" alt="Nemora"
                   style={{ width: 72, height: 72, borderRadius: 18, margin: '0 auto' }} />
               </div>
-              <h2 style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+              <h2 style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: '#f0f6ff', letterSpacing: '-0.3px' }}>
                 Il cuore di Nemora
               </h2>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: '0 0 20px' }}>
+              <p style={{ fontSize: 14, color: '#a8c4e8', lineHeight: 1.7, margin: '0 0 20px' }}>
                 Nemora non è solo un nome, è un tributo alla nostra famiglia. Nasce dall'intreccio delle anime che hanno vissuto e che vivono con noi.
               </p>
-              <div style={{ background: 'rgba(29,158,117,0.07)', border: '1px solid rgba(29,158,117,0.18)', borderRadius: 16, padding: '14px 16px', marginBottom: 16 }}>
-                <p style={{ margin: 0, fontSize: 13, color: '#0F6E56', lineHeight: 1.7 }}>
+              <div style={{ background: 'rgba(29,158,117,0.12)', border: '1px solid rgba(29,158,117,0.3)', borderRadius: 16, padding: '14px 16px', marginBottom: 16 }}>
+                <p style={{ margin: 0, fontSize: 13, color: '#4fd1a5', lineHeight: 1.7 }}>
                   Il nome affonda le sue radici nel termine latino <em>nemora</em> — i boschi, i luoghi sacri della natura — evocando rifugio, pace e rigenerazione.
                 </p>
               </div>
@@ -1272,24 +1275,24 @@ export default function App() {
               ].map(({ titolo, testo }) => (
                 <div key={titolo} style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'flex-start' }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1D9E75', flexShrink: 0, marginTop: 6 }} />
-                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                    <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{titolo}:</strong> {testo}
+                  <p style={{ margin: 0, fontSize: 13, color: '#a8c4e8', lineHeight: 1.65 }}>
+                    <strong style={{ color: '#f0f6ff', fontWeight: 600 }}>{titolo}:</strong> {testo}
                   </p>
                 </div>
               ))}
               <p style={{ textAlign: 'center', margin: '20px 0 8px', fontSize: 13, fontStyle: 'italic', color: '#1D9E75', letterSpacing: '0.2px' }}>
                 Dove la tecnologia incontra il benessere, ispirata da chi amiamo.
               </p>
-              <p style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.3px' }}>
+              <p style={{ textAlign: 'center', margin: '0 0 20px', fontSize: 11, color: 'rgba(168,196,232,0.5)', letterSpacing: '0.3px' }}>
                 v{APP_VERSION} · {BUILD_DATE}
               </p>
               <button
                 onClick={() => setShowEasterEgg(false)}
                 style={{
                   width: '100%', padding: '13px', borderRadius: 16,
-                  border: '1px solid rgba(29,158,117,0.3)',
-                  background: 'rgba(29,158,117,0.08)',
-                  color: '#0F6E56', fontSize: 14, fontWeight: 600,
+                  border: '1px solid rgba(29,158,117,0.4)',
+                  background: 'rgba(29,158,117,0.15)',
+                  color: '#4fd1a5', fontSize: 14, fontWeight: 600,
                   fontFamily: 'inherit', cursor: 'pointer',
                 }}
               >
