@@ -733,15 +733,34 @@ function OrariOperatore({ operatore }) {
 // GESTIONE RUOLO — promuovi / revoca
 // ─────────────────────────────────────────────────────────────
 function RuoloManager({ operatore, onRuoloChanged }) {
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
-  const [confirm,  setConfirm]  = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState('');
+  const [confirm,       setConfirm]       = useState(false);
+  const [ruoloAttuale,  setRuoloAttuale]  = useState(null); // letto da utenti_salone
+  const [fetchingRuolo, setFetchingRuolo] = useState(true);
 
-  const ruoloAttuale = operatore.ruolo || 'operatore';
-  const isAdmin      = ruoloAttuale === 'admin';
-  const nuovoRuolo   = isAdmin ? 'operatore' : 'admin';
-  const label        = isAdmin ? 'Revoca admin → operatore' : 'Promuovi ad admin';
-  const colorAccent  = isAdmin ? '#d97706' : '#2563eb';
+  // Il ruolo vero vive in utenti_salone, non più in operatori.ruolo —
+  // lo leggiamo via auth_user_id al mount.
+  useEffect(() => {
+    let attivo = true;
+    supabase
+      .from('utenti_salone')
+      .select('ruolo')
+      .eq('user_id', operatore.auth_user_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!attivo) return;
+        setRuoloAttuale(data?.ruolo ?? 'operatore');
+        setFetchingRuolo(false);
+      });
+    return () => { attivo = false; };
+  }, [operatore.auth_user_id]);
+
+  const isOwner = ruoloAttuale === 'owner';
+  const isAdmin = ruoloAttuale === 'admin';
+  const nuovoRuolo  = isAdmin ? 'operatore' : 'admin';
+  const label       = isAdmin ? 'Revoca admin → operatore' : 'Promuovi ad admin';
+  const colorAccent = isAdmin ? '#d97706' : '#2563eb';
 
   const cambia = async () => {
     setLoading(true);
@@ -761,8 +780,7 @@ function RuoloManager({ operatore, onRuoloChanged }) {
       );
       const json = await res.json();
       if (!res.ok) { setError(json.error || 'Errore durante il cambio ruolo.'); return; }
-      // Aggiorna anche la colonna locale su operatori
-      await supabase.from('operatori').update({ ruolo: nuovoRuolo }).eq('id', operatore.id);
+      setRuoloAttuale(nuovoRuolo);
       onRuoloChanged(nuovoRuolo);
       setConfirm(false);
     } catch (e) {
@@ -771,6 +789,36 @@ function RuoloManager({ operatore, onRuoloChanged }) {
       setLoading(false);
     }
   };
+
+  if (fetchingRuolo) {
+    return (
+      <div style={{ marginTop: 16, borderTop: '1px solid var(--card-border)', paddingTop: 14 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Caricamento ruolo...</div>
+      </div>
+    );
+  }
+
+  // L'owner del salone non è gestibile da qui — protezione lato UI,
+  // oltre a quella già presente lato Edge Function.
+  if (isOwner) {
+    return (
+      <div style={{ marginTop: 16, borderTop: '1px solid var(--card-border)', paddingTop: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+          Ruolo account
+        </div>
+        <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+            background: 'rgba(124,58,237,0.12)', color: '#7c3aed' }}>
+            owner
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
+            Proprietario del salone — ruolo non modificabile qui.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginTop: 16, borderTop: '1px solid var(--card-border)', paddingTop: 14 }}>
@@ -1260,12 +1308,14 @@ function OperatoreCard({ operatore: op, delay, disattivo, onClick }) {
 
       {/* Badge ruolo + colore + freccia */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        {op.ruolo === 'admin' && (
+        {(op.ruolo === 'admin' || op.ruolo === 'owner') && (
           <span style={{
             fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
-            background: 'rgba(37,99,235,0.12)', color: '#2563eb', letterSpacing: '0.3px',
+            background: op.ruolo === 'owner' ? 'rgba(124,58,237,0.12)' : 'rgba(37,99,235,0.12)',
+            color: op.ruolo === 'owner' ? '#7c3aed' : '#2563eb',
+            letterSpacing: '0.3px',
           }}>
-            admin
+            {op.ruolo}
           </span>
         )}
         <div style={{
