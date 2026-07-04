@@ -3,6 +3,13 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/guida.html",
+      "destination": "/guida.html"
+    },
+    {
+      "source": "/((?!guida.html).*)",
+      "destination": "/index.html"
+    }
   ]
 }

@@ -484,6 +484,7 @@ export default function App() {
   const [pendingClienteId, setPendingClienteId] = useState(null);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [showEasterEgg,  setShowEasterEgg]  = useState(false);
+  const [showGuida,      setShowGuida]      = useState(false);
   const [session,        setSession]        = useState(undefined);
   const [roleVerificato, setRoleVerificato] = useState(null);
   const [saloneId,       setSaloneId]       = useState(null);
@@ -1303,14 +1304,12 @@ export default function App() {
         )}
       </AnimatePresence>
         {/* ── Bottone guida ? ── */}
-        <a
-          href="/guida.html"
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          onClick={() => setShowGuida(true)}
           title="Guida all'uso"
           style={{
             position: 'fixed',
-            bottom: 96,   // sopra la navbar mobile (che è ~72px)
+            bottom: 96,
             right: 16,
             zIndex: 90,
             width: 36,
@@ -1325,18 +1324,81 @@ export default function App() {
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            textDecoration: 'none',
             color: 'var(--text-muted, #64748b)',
             fontSize: 16,
             fontWeight: 700,
             fontFamily: 'inherit',
-            transition: 'opacity 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
         >
           ?
-        </a>
+        </button>
+
+        {/* ── Modal Guida ── */}
+      <AnimatePresence>
+        {showGuida && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowGuida(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 600,
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+              display: 'flex', alignItems: 'stretch', justifyContent: 'center',
+              padding: '16px',
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 860,
+                margin: 'auto',
+                borderRadius: 24,
+                overflow: 'hidden',
+                display: 'flex', flexDirection: 'column',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+                background: '#f8fafc',
+              }}
+            >
+              {/* Header */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '14px 20px',
+                background: '#ffffff',
+                borderBottom: '1px solid #e2e8f0',
+                flexShrink: 0,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>🌿</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Guida a Nemora</span>
+                </div>
+                <button
+                  onClick={() => setShowGuida(false)}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    border: '1px solid #e2e8f0', background: '#f1f5f9',
+                    cursor: 'pointer', fontSize: 16, color: '#64748b',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'inherit',
+                  }}
+                >✕</button>
+              </div>
+              {/* Iframe */}
+              <iframe
+                src="/guida.html"
+                style={{
+                  flex: 1, border: 'none', width: '100%',
+                  minHeight: '70vh',
+                }}
+                title="Guida Nemora"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
         <UpdateBanner />
      <OfflineIndicator />
