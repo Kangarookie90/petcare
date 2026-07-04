@@ -518,8 +518,8 @@ function ModalOperatore({ operatore, onClose, onSaved, onDeleted }) {
           </button>
         </div>
 
-        {/* Gestione ruolo — solo per operatori esistenti con auth_user_id */}
-        {isEdit && operatore?.auth_user_id && (
+        {/* Gestione ruolo — per operatori con utenza Auth collegata */}
+        {isEdit && (operatore?.auth_user_id || operatore?.id) && (
           <RuoloManager operatore={operatore} onRuoloChanged={(nuovoRuolo) => onSaved({ ...operatore, ruolo: nuovoRuolo })} />
         )}
 
@@ -739,22 +739,41 @@ function RuoloManager({ operatore, onRuoloChanged }) {
   const [ruoloAttuale,  setRuoloAttuale]  = useState(null); // letto da utenti_salone
   const [fetchingRuolo, setFetchingRuolo] = useState(true);
 
-  // Il ruolo vero vive in utenti_salone, non più in operatori.ruolo —
-  // lo leggiamo via auth_user_id al mount.
+  // Il ruolo vero vive in utenti_salone.
+  // Cerca prima per user_id (auth_user_id), poi per operatore_id come fallback.
   useEffect(() => {
     let attivo = true;
-    supabase
-      .from('utenti_salone')
-      .select('ruolo')
-      .eq('user_id', operatore.auth_user_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!attivo) return;
-        setRuoloAttuale(data?.ruolo ?? 'operatore');
-        setFetchingRuolo(false);
-      });
+    const cerca = async () => {
+      let ruolo = null;
+      if (operatore.auth_user_id) {
+        const { data } = await supabase
+          .from('utenti_salone')
+          .select('ruolo, user_id')
+          .eq('user_id', operatore.auth_user_id)
+          .maybeSingle();
+        ruolo = data?.ruolo ?? null;
+      }
+      // Fallback: cerca per operatore_id (utile se auth_user_id non è ancora compilato)
+      if (!ruolo && operatore.id) {
+        const { data } = await supabase
+          .from('utenti_salone')
+          .select('ruolo, user_id')
+          .eq('operatore_id', operatore.id)
+          .maybeSingle();
+        ruolo = data?.ruolo ?? null;
+        // Se trovato, aggiorna anche auth_user_id localmente per le operazioni successive
+        if (data?.user_id && !operatore.auth_user_id) {
+          operatore.auth_user_id = data.user_id;
+        }
+      }
+      if (!attivo) return;
+      // null = nessuna utenza Auth — mostriamo un messaggio apposito
+      setRuoloAttuale(ruolo);
+      setFetchingRuolo(false);
+    };
+    cerca();
     return () => { attivo = false; };
-  }, [operatore.auth_user_id]);
+  }, [operatore.auth_user_id, operatore.id]);
 
   const isOwner = ruoloAttuale === 'owner';
   const isAdmin = ruoloAttuale === 'admin';
@@ -794,6 +813,27 @@ function RuoloManager({ operatore, onRuoloChanged }) {
     return (
       <div style={{ marginTop: 16, borderTop: '1px solid var(--card-border)', paddingTop: 14 }}>
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Caricamento ruolo...</div>
+      </div>
+    );
+  }
+
+  // Operatore senza utenza Auth collegata — non ha accesso all'app
+  if (ruoloAttuale === null) {
+    return (
+      <div style={{ marginTop: 16, borderTop: '1px solid var(--card-border)', paddingTop: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+          Ruolo account
+        </div>
+        <div style={{ ...glassCard, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+            background: 'rgba(107,114,128,0.1)', color: 'var(--text-muted)' }}>
+            nessuna utenza
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
+            Usa "Invita operatore" per dargli accesso all'app.
+          </span>
+        </div>
       </div>
     );
   }

@@ -35,7 +35,7 @@ export default function DashboardOperatoreView({ role, session }) {
   // role può essere null mentre roleVerificato è ancora in caricamento da DB
   // Aspettiamo che sia definito prima di prendere decisioni
   const roleDefinito = role !== null && role !== undefined;
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || role === 'owner';
 
   const [operatori,     setOperatori]     = useState([]);
   const [opSel,         setOpSel]         = useState(null);
@@ -54,16 +54,19 @@ export default function DashboardOperatoreView({ role, session }) {
   useEffect(() => {
     if (!session?.user?.email) return; // sessione non ancora disponibile
     if (!roleDefinito) return;         // ruolo non ancora verificato da DB
-    supabase.from('operatori').select('id,nome,cognome,colore,email').eq('attivo', true).order('nome')
+    supabase.from('operatori').select('id,nome,cognome,colore,email,auth_user_id').eq('attivo', true).order('nome')
       .then(({ data }) => {
         const lista = data || [];
         setOperatori(lista);
-        // Auto-seleziona sempre l'operatore loggato:
-        // - se è admin: mostra la schermata di selezione (opSel rimane null)
-        // - se è operatore: selezione automatica sul proprio record
-        if (!isAdmin && session?.user?.email) {
-          const proprio = lista.find(op => op.email === session.user.email);
+        // Auto-seleziona l'operatore loggato per tutti i ruoli:
+        // - owner/admin CON record in operatori → auto-selezionati (con bottone Cambia)
+        // - owner SENZA record in operatori     → schermata selezione (opSel resta null)
+        // - operatore puro                      → auto-selezionato (senza Cambia)
+        if (session?.user?.id) {
+          const proprio = lista.find(op => op.auth_user_id === session.user.id)
+                       ?? lista.find(op => op.email === session.user.email);
           if (proprio) setOpSel(proprio);
+          // Se admin/owner senza match in operatori → opSel resta null → schermata selezione
         }
       });
   }, [session, isAdmin, roleDefinito]);
@@ -170,23 +173,23 @@ export default function DashboardOperatoreView({ role, session }) {
 
   // ── Selezione operatore — solo per admin ─────────────────
   if (!opSel) {
-    // L'operatore non dovrebbe mai arrivare qui (auto-selezione al mount).
-    // Se ci arriva significa che la sua email non è in tabella operatori.
+    // Schermata selezione — ci arrivano:
+    // 1. Owner senza record in operatori (normale)
+    // 2. Operatori il cui auth_user_id non è ancora collegato (errore configurazione)
+    if (!isAdmin && !roleDefinito) {
+      return (
+        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+          style={{ padding:'0 0 2rem', width:'100%' }}>
+          <div style={{ ...glass, padding:'32px 24px', textAlign:'center' }}>
+            <div style={{ width:32, height:32, borderRadius:'50%', margin:'0 auto 12px',
+              border:'3px solid rgba(37,99,235,0.2)', borderTopColor:'#2563eb',
+              animation:'spin 0.7s linear infinite' }} />
+            <p style={{ margin:0, fontSize:13, color:'var(--text-secondary)' }}>Caricamento...</p>
+          </div>
+        </motion.div>
+      );
+    }
     if (!isAdmin) {
-      // Se role non è ancora definito, mostra loading invece del messaggio di errore
-      if (!roleDefinito) {
-        return (
-          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
-            style={{ padding:'0 0 2rem', width:'100%' }}>
-            <div style={{ ...glass, padding:'32px 24px', textAlign:'center' }}>
-              <div style={{ width:32, height:32, borderRadius:'50%', margin:'0 auto 12px',
-                border:'3px solid rgba(37,99,235,0.2)', borderTopColor:'#2563eb',
-                animation:'spin 0.7s linear infinite' }} />
-              <p style={{ margin:0, fontSize:13, color:'var(--text-secondary)' }}>Caricamento...</p>
-            </div>
-          </motion.div>
-        );
-      }
       return (
         <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
           style={{ padding:'0 0 2rem', width:'100%' }}>
@@ -211,7 +214,7 @@ export default function DashboardOperatoreView({ role, session }) {
             👤 Dashboard Operatore
           </h1>
           <p style={{ fontSize:14, color:'var(--text-secondary)', margin:0 }}>
-            Seleziona il tuo nome per vedere i tuoi appuntamenti di oggi
+            Seleziona un operatore per vedere gli appuntamenti di oggi
           </p>
         </div>
 
