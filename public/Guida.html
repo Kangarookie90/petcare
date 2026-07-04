@@ -271,6 +271,27 @@
     </div>
   </div>
 
+  <!-- Barra ricerca -->
+  <div style="padding: 0 12px 16px;">
+    <div style="position:relative;">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;opacity:0.4;">🔍</span>
+      <input
+        id="guida-search"
+        type="search"
+        placeholder="Cerca nella guida..."
+        autocomplete="off"
+        style="
+          width:100%; padding:8px 10px 8px 32px;
+          border:1px solid var(--border); border-radius:10px;
+          background:var(--bg); color:var(--text);
+          font-size:13px; font-family:inherit;
+          outline:none;
+        "
+      />
+    </div>
+    <div id="search-results" style="display:none; margin-top:8px; display:none;"></div>
+  </div>
+
   <div class="nav-section">Introduzione</div>
   <a class="nav-item" href="#intro"><span class="nav-dot"></span>Come funziona</a>
   <a class="nav-item" href="#ruoli"><span class="nav-dot"></span>Ruoli e permessi</a>
@@ -950,7 +971,7 @@
 </main>
 
 <script>
-  // Evidenzia voce sidebar attiva allo scroll
+  // ── Scroll spy sidebar ──
   const sections = document.querySelectorAll('.section');
   const navItems = document.querySelectorAll('.nav-item');
   const observer = new IntersectionObserver(entries => {
@@ -963,6 +984,116 @@
     });
   }, { rootMargin: '-30% 0px -60% 0px' });
   sections.forEach(s => observer.observe(s));
+
+  // ── Ricerca inline ──
+  const searchInput  = document.getElementById('guida-search');
+  const searchBox    = document.getElementById('search-results');
+  const main         = document.querySelector('.main');
+
+  // Raccoglie tutti i blocchi di testo cercabili (card, steps li, tip, warn)
+  function buildIndex() {
+    const items = [];
+    document.querySelectorAll('.section').forEach(sec => {
+      const secTitle = sec.querySelector('.section-title')?.textContent?.trim() || '';
+      const secId    = sec.id;
+      // Raccoglie card, step, tip, warn
+      sec.querySelectorAll('.card, .steps li, .tip, .warn').forEach(el => {
+        const text = el.textContent.trim();
+        if (text.length > 10) {
+          items.push({ secId, secTitle, text, el });
+        }
+      });
+    });
+    return items;
+  }
+
+  let index = null;
+  searchInput.addEventListener('focus', () => { if (!index) index = buildIndex(); });
+
+  // Highlight — wrappa le occorrenze in <mark>
+  function highlight(text, query) {
+    const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return text.replace(re, '<mark style="background:#fef08a;border-radius:3px;padding:0 2px;">$1</mark>');
+  }
+
+  // Tronca il testo attorno alla prima occorrenza
+  function snippet(text, query, radius = 80) {
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return text.slice(0, radius * 2) + '…';
+    const start = Math.max(0, idx - radius);
+    const end   = Math.min(text.length, idx + query.length + radius);
+    return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
+  }
+
+  let originalContent = null;
+
+  function clearSearch() {
+    searchBox.style.display = 'none';
+    searchBox.innerHTML = '';
+    // Ripristina il contenuto originale se avevamo filtrato
+    if (originalContent) {
+      main.innerHTML = originalContent;
+      originalContent = null;
+      // Riattacca observer dopo ripristino
+      document.querySelectorAll('.section').forEach(s => observer.observe(s));
+    }
+  }
+
+  function doSearch(query) {
+    if (!index) index = buildIndex();
+    query = query.trim();
+    if (query.length < 2) { clearSearch(); return; }
+
+    const q = query.toLowerCase();
+    const results = index.filter(item => item.text.toLowerCase().includes(q));
+
+    // Raggruppa per sezione
+    const bySection = {};
+    results.forEach(r => {
+      if (!bySection[r.secId]) bySection[r.secId] = { title: r.secTitle, items: [] };
+      bySection[r.secId].items.push(r);
+    });
+
+    if (Object.keys(bySection).length === 0) {
+      searchBox.style.display = 'block';
+      searchBox.innerHTML = `<div style="font-size:13px;color:var(--text-muted);padding:8px 4px;">Nessun risultato per "<strong>${query}</strong>"</div>`;
+      return;
+    }
+
+    // Mostra risultati nel dropdown
+    let html = '';
+    Object.entries(bySection).forEach(([secId, group]) => {
+      html += `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);padding:6px 4px 3px;">${group.title}</div>`;
+      group.items.slice(0, 3).forEach(item => {
+        const snip = snippet(item.text, query);
+        const hl   = highlight(snip, query);
+        html += `
+          <a href="#${secId}" onclick="searchInput.blur();clearSearch();"
+            style="display:block;padding:7px 8px;border-radius:8px;text-decoration:none;
+                   color:var(--text);font-size:12px;line-height:1.5;
+                   border:1px solid transparent;margin-bottom:3px;
+                   background:var(--card);"
+            onmouseover="this.style.borderColor='var(--green)'"
+            onmouseout="this.style.borderColor='transparent'"
+          >${hl}</a>`;
+      });
+    });
+
+    searchBox.style.display = 'block';
+    searchBox.innerHTML = html;
+  }
+
+  searchInput.addEventListener('input', e => doSearch(e.target.value));
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { searchInput.value = ''; clearSearch(); searchInput.blur(); }
+  });
+
+  // Chiudi cliccando fuori
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#guida-search') && !e.target.closest('#search-results')) {
+      searchBox.style.display = 'none';
+    }
+  });
 </script>
 </body>
 </html>
