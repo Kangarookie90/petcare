@@ -1302,6 +1302,42 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+        {/* ── Bottone guida ? ── */}
+        <a
+          href="/guida.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Guida all'uso"
+          style={{
+            position: 'fixed',
+            bottom: 96,   // sopra la navbar mobile (che è ~72px)
+            right: 16,
+            zIndex: 90,
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: 'var(--card-bg, rgba(255,255,255,0.72))',
+            border: '1px solid var(--card-border, rgba(0,0,0,0.1))',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            textDecoration: 'none',
+            color: 'var(--text-muted, #64748b)',
+            fontSize: 16,
+            fontWeight: 700,
+            fontFamily: 'inherit',
+            transition: 'opacity 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+        >
+          ?
+        </a>
+
         <UpdateBanner />
      <OfflineIndicator />
     </>

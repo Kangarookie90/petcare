@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guida Nemora</title>
+<style>
+  :root {
+    --green: #1D9E75;
+    --green-light: rgba(29,158,117,0.10);
+    --green-border: rgba(29,158,117,0.25);
+    --blue: #2563eb;
+    --blue-light: rgba(37,99,235,0.10);
+    --amber: #d97706;
+    --amber-light: rgba(217,119,6,0.10);
+    --purple: #7c3aed;
+    --purple-light: rgba(124,58,237,0.10);
+    --red: #dc2626;
+    --red-light: rgba(220,38,38,0.08);
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --radius: 16px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+
+  /* ── Layout ── */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 260px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0;
+    z-index: 100;
+  }
+  .main {
+    margin-left: 260px;
+    padding: 48px 48px 80px;
+    max-width: 860px;
+  }
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 24px 20px 60px; }
+  }
+
+  /* ── Sidebar ── */
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #1a3a2a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .logo-text { font-size: 17px; font-weight: 700; color: var(--text); }
+  .logo-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+  .nav-section {
+    padding: 8px 20px 4px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--text-muted);
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 20px;
+    font-size: 13px; color: var(--text-muted);
+    text-decoration: none;
+    border-radius: 0;
+    transition: background 0.12s, color 0.12s;
+    cursor: pointer;
+  }
+  .nav-item:hover { background: var(--bg); color: var(--text); }
+  .nav-item.active { color: var(--green); font-weight: 600; }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+  /* ── Header ── */
+  .page-header {
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-title {
+    font-size: 32px; font-weight: 800; color: var(--text);
+    letter-spacing: -0.8px; margin-bottom: 8px;
+  }
+  .page-subtitle { font-size: 15px; color: var(--text-muted); line-height: 1.6; }
+
+  /* ── Sezioni ── */
+  .section {
+    margin-bottom: 56px;
+    scroll-margin-top: 32px;
+  }
+  .section-title {
+    font-size: 22px; font-weight: 700; color: var(--text);
+    letter-spacing: -0.4px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .section-body { color: var(--text); }
+
+  /* ── Card ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    margin-bottom: 8px;
+  }
+  .card p { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
+
+  /* ── Badge ruolo ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 700; padding: 3px 9px;
+    border-radius: 6px; text-transform: uppercase; letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+  .badge-owner { background: var(--purple-light); color: var(--purple); }
+  .badge-admin { background: var(--blue-light); color: var(--blue); }
+  .badge-op    { background: var(--green-light); color: var(--green); }
+
+  /* ── Ruolo banner ── */
+  .role-banner {
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: 13px; line-height: 1.6;
+  }
+  .role-banner.admin { background: var(--blue-light); border: 1px solid rgba(37,99,235,0.2); }
+  .role-banner.op    { background: var(--green-light); border: 1px solid var(--green-border); }
+  .role-banner-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .role-banner strong { color: var(--text); }
+
+  /* ── Steps ── */
+  .steps { list-style: none; padding: 0; }
+  .steps li {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px; line-height: 1.6;
+  }
+  .steps li:last-child { border-bottom: none; }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--green); color: #fff;
+    font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+
+  /* ── Mock screen ── */
+  .mock {
+    background: #0c1628;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 16px 0;
+    font-family: monospace;
+    font-size: 13px;
+    color: #a8c4e8;
+    line-height: 1.8;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .mock .mock-header {
+    color: #4fd1a5; font-weight: 700; margin-bottom: 8px;
+    font-family: -apple-system, sans-serif; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    padding-bottom: 8px; margin-bottom: 12px;
+  }
+  .mock .row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+  .mock .label { color: #6b8fbc; font-family: -apple-system, sans-serif; font-size: 12px; }
+  .mock .val { color: #e2eeff; font-family: -apple-system, sans-serif; font-size: 13px; font-weight: 600; }
+  .mock .sep { border-top: 1px solid rgba(255,255,255,0.06); margin: 8px 0; }
+  .mock-tab {
+    display: inline-block; background: rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 4px 10px; margin: 3px;
+    font-family: -apple-system, sans-serif; font-size: 12px; color: #a8c4e8;
+  }
+  .mock-tab.active { background: rgba(29,158,117,0.25); color: #4fd1a5; font-weight: 700; }
+
+  /* ── Tip / Warning ── */
+  .tip {
+    background: var(--green-light);
+    border: 1px solid var(--green-border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 13px; color: var(--text);
+    margin: 12px 0;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .tip-icon { flex-shrink: 0; margin-top: 1px; }
+  .warn {
+    background: var(--amber-light);
+    border: 1px solid rgba(217,119,6,0.25);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 13px; color: var(--text);
+    margin: 12px 0;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+
+  /* ── Nav pill (simulazione barra app) ── */
+  .app-nav {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .nav-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 12px;
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+  }
+  .nav-pill.active { background: var(--green-light); border-color: var(--green-border); color: var(--green); }
+
+  /* ── Divider ── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+
+  /* ── Toc ── */
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 40px;
+  }
+  .toc-title { font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .toc a { display: block; font-size: 13px; color: var(--text-muted); text-decoration: none; padding: 3px 0; }
+  .toc a:hover { color: var(--green); }
+  .toc-indent { padding-left: 16px; }
+
+  /* ── Print ── */
+  @media print {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ── -->
+<nav class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">🌿</div>
+    <div>
+      <div class="logo-text">Nemora</div>
+      <div class="logo-sub">Guida all'uso</div>
+    </div>
+  </div>
+
+  <div class="nav-section">Introduzione</div>
+  <a class="nav-item" href="#intro"><span class="nav-dot"></span>Come funziona</a>
+  <a class="nav-item" href="#ruoli"><span class="nav-dot"></span>Ruoli e permessi</a>
+  <a class="nav-item" href="#navigazione"><span class="nav-dot"></span>Navigazione</a>
+
+  <div class="nav-section">Operatività</div>
+  <a class="nav-item" href="#calendario"><span class="nav-dot"></span>Calendario</a>
+  <a class="nav-item" href="#prossimi"><span class="nav-dot"></span>Prossimi</a>
+  <a class="nav-item" href="#dashboard-op"><span class="nav-dot"></span>Dashboard Op.</a>
+  <a class="nav-item" href="#lista-attesa"><span class="nav-dot"></span>Lista Attesa</a>
+  <a class="nav-item" href="#ricerca"><span class="nav-dot"></span>Ricerca globale</a>
+
+  <div class="nav-section">Anagrafica</div>
+  <a class="nav-item" href="#clienti"><span class="nav-dot"></span>Clienti</a>
+  <a class="nav-item" href="#pet"><span class="nav-dot"></span>Pet</a>
+
+  <div class="nav-section">Gestione (admin)</div>
+  <a class="nav-item" href="#primanota"><span class="nav-dot"></span>Prima Nota</a>
+  <a class="nav-item" href="#statistiche"><span class="nav-dot"></span>Statistiche</a>
+  <a class="nav-item" href="#social"><span class="nav-dot"></span>Social</a>
+  <a class="nav-item" href="#impostazioni"><span class="nav-dot"></span>Impostazioni</a>
+  <a class="nav-item" href="#operatori"><span class="nav-dot"></span>Operatori</a>
+
+  <div class="nav-section">Altro</div>
+  <a class="nav-item" href="#notifiche"><span class="nav-dot"></span>Notifiche</a>
+  <a class="nav-item" href="#offline"><span class="nav-dot"></span>Modalità offline</a>
+  <a class="nav-item" href="#profilo"><span class="nav-dot"></span>Profilo</a>
+</nav>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+  <!-- Intestazione -->
+  <div class="page-header">
+    <div class="page-title">🌿 Guida a Nemora</div>
+    <div class="page-subtitle">
+      Manuale completo per operatori e amministratori del salone.
+      Nemora è un'app gestionale pensata per il toelettatore: calendario appuntamenti,
+      schede animali, prima nota e molto altro — tutto disponibile anche senza connessione.
+    </div>
+  </div>
+
+  <!-- TOC -->
+  <div class="toc">
+    <div class="toc-title">Indice</div>
+    <a href="#intro">Come funziona Nemora</a>
+    <a href="#ruoli">Ruoli e permessi</a>
+    <a href="#navigazione">Navigazione</a>
+    <a href="#calendario">Calendario appuntamenti</a>
+    <a href="#prossimi">Prossimi appuntamenti</a>
+    <a href="#dashboard-op">Dashboard Operatore</a>
+    <a href="#lista-attesa">Lista d'attesa</a>
+    <a href="#ricerca">Ricerca globale</a>
+    <a href="#clienti">Schede clienti</a>
+    <a href="#pet">Schede animali (Pet)</a>
+    <a href="#primanota">Prima Nota</a>
+    <a href="#statistiche">Statistiche</a>
+    <a href="#social">Generatore post social</a>
+    <a href="#impostazioni">Impostazioni</a>
+    <a href="#operatori">Gestione operatori</a>
+    <a href="#notifiche">Notifiche e recall</a>
+    <a href="#offline">Modalità offline</a>
+    <a href="#profilo">Profilo personale</a>
+  </div>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="intro">
+    <div class="section-title">
+      <div class="section-icon" style="background:#e0f2fe">💡</div>
+      Come funziona Nemora
+    </div>
+    <div class="section-body">
+      <div class="card">
+        <div class="card-title">Un gestionale pensato per il salone</div>
+        <p>Nemora è una PWA (Progressive Web App): si installa sul telefono o tablet come un'app normale, ma non richiede l'App Store. Funziona su Android, iOS e desktop tramite browser Chrome o Safari.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Dati sempre disponibili, anche offline</div>
+        <p>Nemora sincronizza i dati in locale sul dispositivo. Se perdi la connessione, puoi continuare a lavorare: i dati modificati offline vengono inviati al server appena la rete torna disponibile. In alto compare un indicatore arancione quando sei offline.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Installazione su Android</div>
+        <p>Apri l'app in Chrome → menu ⋮ in alto a destra → <strong>Installa app</strong>. Una volta installata, la barra degli indirizzi del browser scompare e l'app si apre a schermo intero come un'applicazione nativa.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="ruoli">
+    <div class="section-title">
+      <div class="section-icon" style="background:#ede9fe">🔐</div>
+      Ruoli e permessi
+    </div>
+    <div class="section-body">
+      <p style="color:var(--text-muted);font-size:14px;margin-bottom:16px;">
+        Ogni account in Nemora ha un ruolo che determina cosa può vedere e fare.
+      </p>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-admin">Admin</span>
+          <span style="font-size:13px;color:var(--text-muted)">Cristina, Greta</span>
+        </div>
+        <p>Accesso completo: calendario, clienti, pet, prima nota, statistiche, social, impostazioni, lista attesa. Può gestire i ruoli degli operatori, invitare nuovi utenti e modificare i servizi del salone. Nella Dashboard Operatore vede tutti gli operatori e può switchare tra loro.</p>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-op">Operatore</span>
+          <span style="font-size:13px;color:var(--text-muted)">Enrico (e futuri operatori)</span>
+        </div>
+        <p>Accesso operativo: calendario, clienti, pet, prossimi appuntamenti, dashboard operatore, lista attesa, ricerca globale. <strong>Non vede</strong>: prima nota, statistiche, impostazioni avanzate, social. Nella Dashboard Operatore vede solo i propri appuntamenti.</p>
+      </div>
+
+      <div class="tip">
+        <span class="tip-icon">💡</span>
+        <span>La promozione di un operatore ad admin avviene dalla scheda operatore in <strong>Impostazioni → Operatori</strong>, sezione "Ruolo account". Solo gli admin possono farlo.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="navigazione">
+    <div class="section-title">
+      <div class="section-icon" style="background:#f0fdf4">🧭</div>
+      Navigazione
+    </div>
+    <div class="section-body">
+      <div class="card">
+        <div class="card-title">Barra di navigazione principale</div>
+        <p>Su telefono la barra è in basso. Su tablet/desktop compare una sidebar a sinistra con tutte le voci. Le voci visibili variano in base al ruolo.</p>
+        <div class="app-nav" style="margin-top:14px;">
+          <div class="nav-pill active">🏠 Home</div>
+          <div class="nav-pill">📅 Calendario</div>
+          <div class="nav-pill">⏭ Prossimi</div>
+          <div class="nav-pill">👤 Clienti</div>
+          <div class="nav-pill">🐾 Pet</div>
+          <div class="nav-pill" style="opacity:0.4">📊 Statistiche</div>
+          <div class="nav-pill" style="opacity:0.4">💰 Prima Nota</div>
+        </div>
+        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">Le voci in grigio sono visibili solo agli admin.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Home — riepilogo rapido</div>
+        <p>La schermata principale mostra: appuntamenti di oggi, quanti in attesa di conferma, totale clienti registrati. Da qui si accede rapidamente al calendario o alla ricerca globale.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Ricerca globale</div>
+        <p>L'icona 🔍 in alto a destra (o il pulsante Cerca in Home) apre la ricerca globale: cerca contemporaneamente tra clienti, animali e appuntamenti. I risultati appaiono in tempo reale mentre si digita.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="calendario">
+    <div class="section-title">
+      <div class="section-icon" style="background:#eff6ff">📅</div>
+      Calendario appuntamenti
+    </div>
+    <div class="section-body">
+
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong> Operatori e admin vedono il calendario completo con tutti gli appuntamenti del salone.</span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Viste disponibili</div>
+        <p>Il calendario offre tre viste selezionabili con i pulsanti in alto: <strong>Giorno</strong> (colonne per operatore), <strong>Settimana</strong> (panoramica 7 giorni), <strong>Mese</strong> (griglia mensile). Scorri a sinistra/destra per cambiare data.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Creare un appuntamento</div>
+        <ol class="steps">
+          <li><span class="step-num">1</span>Tocca il pulsante <strong>+</strong> in basso a destra oppure tocca direttamente una fascia oraria vuota nel calendario.</li>
+          <li><span class="step-num">2</span>Seleziona il <strong>cliente</strong>: scrivi nome o cognome per filtrare la lista. Se il cliente non esiste ancora, usa il link "Nuovo cliente" per crearlo al volo.</li>
+          <li><span class="step-num">3</span>Seleziona l'<strong>animale</strong> del cliente. È possibile aggiungere più animali allo stesso appuntamento.</li>
+          <li><span class="step-num">4</span>Scegli l'<strong>operatore</strong>, la data/ora di inizio e fine, i <strong>servizi</strong> da eseguire.</li>
+          <li><span class="step-num">5</span>Aggiungi eventuali note e imposta lo stato iniziale (In attesa / Confermato).</li>
+          <li><span class="step-num">6</span>Tocca <strong>Salva</strong>. L'appuntamento appare immediatamente nel calendario.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Completare un appuntamento</div>
+        <ol class="steps">
+          <li><span class="step-num">1</span>Tocca l'appuntamento nel calendario per aprirlo.</li>
+          <li><span class="step-num">2</span>Cambia lo stato in <strong>Completato</strong>.</li>
+          <li><span class="step-num">3</span>Nemora chiede se vuoi fare una <strong>foto check-in</strong> (opzionale). La foto viene salvata nel profilo dell'animale.</li>
+          <li><span class="step-num">4</span>Il sistema calcola automaticamente la <strong>prossima visita suggerita</strong> in base alla frequenza media dello storico e propone di prenotarla subito.</li>
+        </ol>
+        <div class="tip">
+          <span class="tip-icon">💡</span>
+          <span>Al completamento viene creata automaticamente una <strong>notifica recall</strong> con la data stimata della prossima visita. La campanella 🔔 avviserà all'avvicinarsi della data.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Blocco orario</div>
+        <p>Puoi creare un <strong>blocco orario</strong> per segnalare pause, ferie o indisponibilità di un operatore senza associare un cliente. Attiva l'opzione "Blocco orario" nel form di creazione appuntamento.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Conferma prezzo e pagamento</div>
+        <p>Nell'appuntamento puoi inserire un <strong>prezzo proposto</strong> e, a servizio eseguito, confermare il prezzo finale e il metodo di pagamento (contanti, carta, ecc.). Questi dati vengono usati nelle statistiche e nella prima nota.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="prossimi">
+    <div class="section-title">
+      <div class="section-icon" style="background:#f0fdf4">⏭</div>
+      Prossimi appuntamenti
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong></span>
+      </div>
+      <div class="card">
+        <p>Vista lista dei prossimi appuntamenti raggruppati per data. Utile per avere una visione rapida dei giorni successivi senza aprire il calendario completo. Ogni card mostra: cliente, animale, operatore, orario e servizi previsti.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="dashboard-op">
+    <div class="section-title">
+      <div class="section-icon" style="background:#fdf4ff">👤</div>
+      Dashboard Operatore
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong> Gli admin vedono tutti gli operatori; gli operatori vedono solo se stessi.</span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">La schermata di lavoro quotidiana</div>
+        <p>La Dashboard Operatore è la vista pensata per il lavoro in salone: mostra gli appuntamenti del giorno dell'operatore selezionato, con i pulsanti <strong>Inizia / Completa / Salta</strong> per avanzare rapidamente nello stato senza navigare.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Saturazione e statistiche rapide</div>
+        <p>In cima alla dashboard, tre indicatori mostrano la saturazione dell'operatore: <strong>oggi</strong> (% delle ore lavorative occupate), <strong>questa settimana</strong> e <strong>questo mese</strong>. I valori si basano sugli orari lavorativi configurati in Impostazioni.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Per gli admin: cambiare operatore</div>
+        <p>Gli admin vedono inizialmente i propri appuntamenti, ma possono toccare il pulsante <strong>Cambia</strong> in alto a destra per vedere la dashboard di un altro operatore.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="lista-attesa">
+    <div class="section-title">
+      <div class="section-icon" style="background:#fffbeb">⏳</div>
+      Lista d'attesa
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong></span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Gestire le richieste in attesa</div>
+        <p>La lista d'attesa raccoglie le richieste di appuntamento che non sono ancora state collocate nel calendario. Per ogni voce si registra: cliente, animale, operatore preferito, data preferita, fascia oraria e servizio richiesto.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Aggiungere una voce</div>
+        <ol class="steps">
+          <li><span class="step-num">1</span>Tocca <strong>+</strong> in basso a destra.</li>
+          <li><span class="step-num">2</span>Cerca e seleziona il cliente, poi l'animale.</li>
+          <li><span class="step-num">3</span>Indica operatore preferito, data preferita, fascia oraria (mattina/pomeriggio/indifferente) e il servizio richiesto.</li>
+          <li><span class="step-num">4</span>Salva. La voce appare nella lista con stato "In attesa".</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Convertire in appuntamento</div>
+        <p>Quando si riesce a collocare il cliente, tocca la voce in lista → <strong>Converti in appuntamento</strong>. Il sistema apre il form del calendario precompilato con i dati della richiesta.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="ricerca">
+    <div class="section-title">
+      <div class="section-icon" style="background:#f1f5f9">🔍</div>
+      Ricerca globale
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong></span>
+      </div>
+      <div class="card">
+        <p>Tocca l'icona 🔍 in alto o premi <strong>Cerca</strong> dalla Home. Digita almeno 2 caratteri per cercare tra <strong>clienti</strong> (nome, cognome, telefono, email), <strong>animali</strong> (nome, specie, razza) e <strong>appuntamenti</strong> (note, data). I risultati appaiono istantaneamente suddivisi per categoria. Tocca un risultato per navigare direttamente alla scheda corrispondente.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="clienti">
+    <div class="section-title">
+      <div class="section-icon" style="background:#f0fdf4">👥</div>
+      Schede clienti
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong> La cancellazione di un cliente richiede il ruolo admin.</span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Creare un nuovo cliente</div>
+        <ol class="steps">
+          <li><span class="step-num">1</span>Vai in <strong>Clienti</strong> → tocca <strong>+</strong>.</li>
+          <li><span class="step-num">2</span>Inserisci nome, cognome, telefono, email, indirizzo e note.</li>
+          <li><span class="step-num">3</span>Puoi aggiungere già uno o più animali durante la creazione del cliente.</li>
+          <li><span class="step-num">4</span>Salva. Il cliente appare immediatamente nella lista.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Scheda cliente</div>
+        <p>Tocca un cliente per aprire la scheda completa. Da qui puoi: modificare i dati anagrafici, vedere e aggiungere i suoi animali, consultare lo storico appuntamenti e vedere il totale speso.</p>
+        <div class="tip" style="margin-top:12px">
+          <span class="tip-icon">💡</span>
+          <span>Se un cliente ha un <strong>prezzo riservato</strong> (es. sconto fisso), impostalo nel campo dedicato: verrà proposto come prezzo di default nei nuovi appuntamenti.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="pet">
+    <div class="section-title">
+      <div class="section-icon" style="background:#fff7ed">🐾</div>
+      Schede animali (Pet)
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong></span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Le tab della scheda animale</div>
+        <p>Ogni animale ha una scheda con 7 sezioni:</p>
+        <div style="margin-top:10px;">
+          <div class="mock-tab active">📋 Scheda</div>
+          <div class="mock-tab">🧠 Carattere</div>
+          <div class="mock-tab">🗺️ Mappa</div>
+          <div class="mock-tab">🏥 Salute</div>
+          <div class="mock-tab">📌 Note</div>
+          <div class="mock-tab">📅 Visite</div>
+          <div class="mock-tab">🎙️ Memo</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 Scheda — dati base</div>
+        <p>Nome, specie, razza, colore, data di nascita, operatore preferito, frequenza di toelettatura (in giorni), servizi abituali, preferenze del proprietario. La <strong>frequenza di toelettatura</strong> viene usata per calcolare la data della prossima visita.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🧠 Carattere — profilo comportamentale</div>
+        <p>Sistema a semaforo per registrare il comportamento del cane/gatto: reazioni con altri cani, al bagnetto, all'asciugatura, al taglio ecc. I segnalatori visivi (verde / giallo / rosso) permettono di capire in un colpo d'occhio prima della visita se ci sono criticità. Spazio per note libere aggiuntive.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🗺️ Mappa — zone critiche</div>
+        <p>Mappa del corpo interattiva (fronte e retro) su cui segnare le zone da trattare con attenzione: allergie cutanee, ferite, zone sensibili. Le zone segnate restano visibili ad ogni visita successiva.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🏥 Salute</div>
+        <p>Note sulle condizioni di salute dell'animale: patologie, medicinali, allergie. Informazioni utili da tenere sempre a portata di mano prima della toelettatura.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📌 Note</div>
+        <p>Note libere aggiuntive sull'animale, modificabili in qualsiasi momento.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📅 Visite — storico appuntamenti</div>
+        <p>Lista di tutti gli appuntamenti passati dell'animale con data, operatore, servizi e prezzo. Include anche le foto scattate al check-in di ogni visita.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎙️ Memo vocali — note audio con AI</div>
+        <p>Registra note vocali direttamente dalla scheda animale. Ogni memo può essere trascritto automaticamente tramite <strong>Whisper AI</strong>: tocca il pulsante ✨ a fianco del memo per ottenere trascrizione e riassunto in italiano. Utile per annotare osservazioni post-toelettatura senza dover digitare.</p>
+        <div class="warn" style="margin-top:12px">
+          <span class="tip-icon">📱</span>
+          <span>La registrazione richiede il permesso al microfono sul dispositivo. Se non parte, controlla le autorizzazioni nelle impostazioni del browser/sistema.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Foto del cliente</div>
+        <p>Puoi caricare una foto del cliente come avatar che appare nella scheda animale. Tocca l'icona fotocamera nella scheda per scattare o caricare un'immagine dalla galleria.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="primanota">
+    <div class="section-title">
+      <div class="section-icon" style="background:#fffbeb">💰</div>
+      Prima Nota
+      <span class="badge badge-admin" style="margin-left:4px">Admin</span>
+    </div>
+    <div class="section-body">
+      <div class="role-banner admin">
+        <span class="role-banner-icon">🔒</span>
+        <span><strong>Solo admin.</strong> Gli operatori non vedono questa sezione.</span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Registrare un movimento</div>
+        <ol class="steps">
+          <li><span class="step-num">1</span>Vai in <strong>Prima Nota</strong> → tocca <strong>+</strong>.</li>
+          <li><span class="step-num">2</span>Scegli il tipo: <strong>Entrata</strong> o <strong>Uscita</strong>.</li>
+          <li><span class="step-num">3</span>Inserisci importo, descrizione, operatore di riferimento e data.</li>
+          <li><span class="step-num">4</span>Salva. Il saldo si aggiorna in tempo reale.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Filtri e riepilogo</div>
+        <p>Filtra i movimenti per periodo (dal/al), tipo (entrate/uscite) e operatore. Il totale del periodo filtrato è sempre visibile in cima alla lista. Il saldo differenzia entrate, uscite e netto.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Export</div>
+        <p>I movimenti del periodo filtrato si esportano in tre formati: <strong>PDF</strong> (pronto per la stampa), <strong>Excel</strong> (.xlsx, per elaborazioni), <strong>CSV</strong> (per altri software). Tocca il pulsante Export in alto a destra.</p>
+      </div>
+
+      <div class="tip">
+        <span class="tip-icon">💡</span>
+        <span>Le chiusure di cassa giornaliere (es. totale incassato da Greta) si registrano qui come entrate con la descrizione e l'operatore. Questo permette di avere il riepilogo per operatore nel report mensile.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="statistiche">
+    <div class="section-title">
+      <div class="section-icon" style="background:#eff6ff">📊</div>
+      Statistiche
+      <span class="badge badge-admin" style="margin-left:4px">Admin</span>
+    </div>
+    <div class="section-body">
+      <div class="role-banner admin">
+        <span class="role-banner-icon">🔒</span>
+        <span><strong>Solo admin.</strong></span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Dashboard mese per mese</div>
+        <p>Le statistiche mostrano i dati del mese selezionato: totale appuntamenti, appuntamenti per operatore, fatturato, clienti attivi, nuovi clienti, animali seguiti, servizi più richiesti. I grafici stile iOS (donut ring e barre orizzontali) danno una visione immediata della distribuzione del lavoro.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Saturazione operatori</div>
+        <p>Per ogni operatore viene calcolata la saturazione settimanale e mensile rispetto agli orari lavorativi configurati. Utile per bilanciare il carico di lavoro.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Export report</div>
+        <p>Esporta il report del mese in <strong>PDF</strong>, <strong>Excel</strong> (con foglio Prima Nota incluso) o <strong>CSV</strong>. Prima dell'export puoi scegliere quali sezioni includere: riepilogo, lista appuntamenti, clienti, animali.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="social">
+    <div class="section-title">
+      <div class="section-icon" style="background:#fdf4ff">📣</div>
+      Generatore post social
+      <span class="badge badge-admin" style="margin-left:4px">Admin</span>
+    </div>
+    <div class="section-body">
+      <div class="role-banner admin">
+        <span class="role-banner-icon">🔒</span>
+        <span><strong>Solo admin.</strong></span>
+      </div>
+      <div class="card">
+        <p>Genera automaticamente post per Instagram/Facebook a partire da un brief che descrivi. Il testo viene creato da un modello AI (Llama 70B) e puoi rielaborarlo prima di pubblicarlo. Utile per mantenere attivo il profilo social del salone senza perdere tempo a scrivere.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="impostazioni">
+    <div class="section-title">
+      <div class="section-icon" style="background:#f1f5f9">⚙️</div>
+      Impostazioni
+      <span class="badge badge-admin" style="margin-left:4px">Admin</span>
+    </div>
+    <div class="section-body">
+      <div class="role-banner admin">
+        <span class="role-banner-icon">🔒</span>
+        <span><strong>Le tab Operatori, Servizi e Backup sono visibili solo agli admin.</strong> Il profilo personale è accessibile a tutti.</span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Tab Operatori</div>
+        <p>Lista di tutti gli operatori del salone. Da qui si gestiscono le schede complete: orari lavorativi, colore calendario, contatti, foto profilo, ruolo account. Vedi la sezione <a href="#operatori" style="color:var(--green)">Gestione operatori</a> per i dettagli.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Tab Servizi</div>
+        <p>Crea, modifica ed elimina i servizi offerti dal salone (bagno, taglio, ecc.) con nome, prezzo base e durata in minuti. I servizi sono selezionabili durante la creazione degli appuntamenti.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Tab Backup</div>
+        <p>Esporta una copia di tutti i dati del salone in un file Excel con un foglio per ogni tabella (clienti, animali, appuntamenti, prima nota ecc.). <strong>Salvare periodicamente questo file</strong> è la procedura di backup manuale consigliata.</p>
+        <div class="warn" style="margin-top:10px">
+          <span class="tip-icon">⚠️</span>
+          <span>Il backup non si fa automaticamente. Ricordati di scaricarlo periodicamente, specie prima di aggiornamenti importanti.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Tab Profilo</div>
+        <p>Accessibile a tutti. Modifica il tuo nome, cognome, telefono e foto profilo. Cambia la password dell'account.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="operatori">
+    <div class="section-title">
+      <div class="section-icon" style="background:#ede9fe">👷</div>
+      Gestione operatori
+      <span class="badge badge-admin" style="margin-left:4px">Admin</span>
+    </div>
+    <div class="section-body">
+      <div class="role-banner admin">
+        <span class="role-banner-icon">🔒</span>
+        <span><strong>Solo admin.</strong> Accessibile da Impostazioni → Operatori.</span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Aggiungere un operatore (senza accesso app)</div>
+        <p>Tocca <strong>+</strong> → compila nome, cognome, colore calendario. Imposta gli orari lavorativi già in fase di creazione. L'operatore appare nel calendario ma non ha accesso all'app.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Invitare un operatore (con accesso app)</div>
+        <ol class="steps">
+          <li><span class="step-num">1</span>Tocca <strong>Invita operatore</strong> in fondo alla lista.</li>
+          <li><span class="step-num">2</span>Inserisci nome, cognome e indirizzo email dell'operatore.</li>
+          <li><span class="step-num">3</span>L'operatore riceve una email con il link per impostare la password.</li>
+          <li><span class="step-num">4</span>Una volta accettato l'invito, l'operatore può accedere all'app con le sue credenziali.</li>
+        </ol>
+        <div class="tip" style="margin-top:12px">
+          <span class="tip-icon">💡</span>
+          <span>Il nuovo operatore entra sempre con ruolo <strong>operatore</strong>. Per promuoverlo ad admin vai nella sua scheda → sezione Ruolo account → Promuovi ad admin.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Orari lavorativi</div>
+        <p>Nella scheda operatore, la sezione <strong>Orari lavorativi</strong> mostra un toggle per ogni giorno della settimana (Lun–Dom) con ora inizio e ora fine. Gli orari vengono usati per calcolare la saturazione nella Dashboard Operatore e nelle Statistiche.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Cambiare il ruolo di un operatore</div>
+        <p>Apri la scheda operatore → scorri fino a <strong>Ruolo account</strong>. Se l'operatore ha un'utenza App collegata, trovi il pulsante <em>Promuovi ad admin</em> o <em>Revoca admin</em>. Conferma per rendere effettivo il cambio.</p>
+        <div class="warn" style="margin-top:10px">
+          <span class="tip-icon">⚠️</span>
+          <span>Solo gli admin possono promuovere altri operatori. Il ruolo owner non è modificabile dall'app.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="notifiche">
+    <div class="section-title">
+      <div class="section-icon" style="background:#fffbeb">🔔</div>
+      Notifiche e recall
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti.</strong></span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Campanella notifiche</div>
+        <p>L'icona 🔔 in alto a destra mostra il numero di notifiche non lette. Toccala per aprire il pannello con tutte le notifiche recenti.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Notifiche recall</div>
+        <p>Quando un appuntamento viene completato, il sistema calcola la data della prossima visita stimata e crea una notifica recall. Questa notifica appare nella campanella avvicinandosi la data, con il nome dell'animale e il telefono del cliente per contattarlo.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Marcare come lette</div>
+        <p>Tocca <strong>Segna tutte come lette</strong> nel pannello notifiche per azzerare il contatore. Le singole notifiche si possono marcare tocca il segno di spunta a fianco.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="offline">
+    <div class="section-title">
+      <div class="section-icon" style="background:#fef2f2">📶</div>
+      Modalità offline
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Funziona per tutti i ruoli.</strong></span>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Come funziona offline</div>
+        <p>Nemora salva una copia locale dei dati sul dispositivo (IndexedDB). Se perdi la connessione, puoi continuare a navigare, creare e modificare appuntamenti, clienti e animali. Le modifiche vengono messe in una <strong>coda</strong> e inviate al server appena la rete torna disponibile.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Indicatore offline</div>
+        <p>Quando sei senza connessione, compare in alto una barra <strong>arancione</strong> con il messaggio "Offline – dati locali". Quando la connessione torna, la barra scompare e i dati vengono sincronizzati automaticamente.</p>
+      </div>
+
+      <div class="warn">
+        <span class="tip-icon">⚠️</span>
+        <span>Le funzioni che richiedono obbligatoriamente internet (upload foto, memo vocali, generatore social, invito operatori) non sono disponibili offline.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section class="section" id="profilo">
+    <div class="section-title">
+      <div class="section-icon" style="background:#f0fdf4">🙂</div>
+      Profilo personale
+    </div>
+    <div class="section-body">
+      <div class="role-banner op">
+        <span class="role-banner-icon">✅</span>
+        <span><strong>Accessibile a tutti da Impostazioni → Profilo.</strong></span>
+      </div>
+
+      <div class="card">
+        <p>Dal profilo puoi modificare il tuo nome e cognome, il numero di telefono e la foto profilo. Puoi anche cambiare la <strong>password</strong> dell'account inserendo quella attuale e la nuova. Tocca Salva per confermare le modifiche.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Logout</div>
+        <p>Il pulsante di logout si trova in fondo alla schermata Profilo (o nella sidebar su tablet). Dopo il logout i dati locali rimangono sul dispositivo ma è necessario riautenticarsi per accedere.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <div style="margin-top:60px;padding-top:24px;border-top:1px solid var(--border);text-align:center;">
+    <p style="font-size:12px;color:var(--text-muted);">Nemora · Guida utente · Aggiornata a luglio 2025</p>
+  </div>
+
+</main>
+
+<script>
+  // Evidenzia voce sidebar attiva allo scroll
+  const sections = document.querySelectorAll('.section');
+  const navItems = document.querySelectorAll('.nav-item');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navItems.forEach(n => n.classList.remove('active'));
+        const active = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
