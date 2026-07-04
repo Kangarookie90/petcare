@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
+import { getSaloneId } from './syncService';
 
 const glass = {
   background:  'var(--card-bg)',
@@ -90,6 +91,7 @@ function ModalAggiungi({ onClose, onSaved }) {
   const save = async () => {
     if (!f.cliente_id) { setError('Seleziona un cliente'); return; }
     setSaving(true); setError('');
+    const saloneId = await getSaloneId();
     const { data, error: err } = await supabase.from('lista_attesa').insert([{
       cliente_id:          f.cliente_id,
       animale_id:          f.animale_id || null,
@@ -98,6 +100,7 @@ function ModalAggiungi({ onClose, onSaved }) {
       fascia_oraria:       f.fascia_oraria,
       servizio_richiesto:  f.servizio_richiesto.trim() || null,
       note:                f.note.trim() || null,
+      salone_id:           saloneId,
       priorita:            f.priorita,
       stato:               'in_attesa',
     }]).select(`*, clienti(nome,cognome,telefono), animali(nome,specie), operatori(nome,colore)`).single();

@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
+import { getSaloneId } from './syncService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -77,12 +78,14 @@ function ModalMovimento({ data, operatori, onClose, onSaved }) {
       setError('Inserisci un importo valido'); return;
     }
     setSaving(true);
+    const saloneId = await getSaloneId();
     const { data: row, error: err } = await supabase.from('primanota').insert([{
       data,
       tipo,
       importo: Number(importo),
       descrizione: descrizione.trim() || null,
       operatore_id: operatoreId || null,
+      salone_id: saloneId,
     }]).select('*, operatori(id,nome,cognome,colore)').single();
     setSaving(false);
     if (err) { setError(err.message); return; }

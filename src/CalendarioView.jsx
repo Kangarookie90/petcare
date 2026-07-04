@@ -12,6 +12,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import itLocale from '@fullcalendar/core/locales/it';
 import { supabase } from './supabaseClient';
+import { getSaloneId } from './syncService';
 import RichiamataAI from './RichiamataAi';
 
 // ── Colori operatori ─────────────────────────────────────────
@@ -462,7 +463,8 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       if (isEdit) {
         result = await supabase.from('appuntamenti').update(payload).eq('id', appuntamento.id).select(SELECT).single();
       } else {
-        result = await supabase.from('appuntamenti').insert([payload]).select(SELECT).single();
+        const saloneId = await getSaloneId();
+        result = await supabase.from('appuntamenti').insert([{ ...payload, salone_id: saloneId }]).select(SELECT).single();
       }
 
       if (result.error) { setError(result.error.message); setSaving(false); return; }
@@ -476,14 +478,14 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
           const sv = servizi.find(x => x.id === sid);
           return { appuntamento_id: apId, servizio_id: sid, prezzo_applicato: sv?.prezzo || null };
         });
-        await supabase.from('appuntamenti_servizi').insert(righeServizi);
+        await supabase.from('appuntamenti_servizi').insert(righeServizi.map(r => ({ ...r, salone_id: saloneId })));
       }
 
       // Salva animali multipli nella junction table
       await supabase.from('appuntamenti_animali').delete().eq('appuntamento_id', apId);
       if (!f.blocco_orario && f.animali_ids.length > 0) {
         await supabase.from('appuntamenti_animali').insert(
-          f.animali_ids.map(aid => ({ appuntamento_id: apId, animale_id: aid }))
+          f.animali_ids.map(aid => ({ appuntamento_id: apId, animale_id: aid, salone_id: saloneId }))
         );
       }
 
@@ -538,6 +540,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
               letto:        false,
               created_at:   new Date().toISOString(),
               appuntamento_id: result.data.id,
+              salone_id:    saloneId,
             });
 
             // 6. Suggerimento UI solo per il primo animale (comportamento esistente)
@@ -1145,6 +1148,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                   const oraStr  = new Date(ap.inizio).toTimeString().slice(0,5);
                   const inizio  = new Date(`${dataStr}T${oraStr}`);
                   const fine    = new Date(inizio.getTime() + 60*60000);
+                  const saloneIdNext = await getSaloneId();
                   const { data: nuovoAp } = await supabase.from('appuntamenti').insert([{
                     cliente_id:   ap.clienti?.id  || ap.cliente_id,
                     animale_id:   ap.animali?.id  || ap.animale_id,
@@ -1152,6 +1156,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
                     inizio: inizio.toISOString(),
                     fine:   fine.toISOString(),
                     stato: 'in attesa',
+                    salone_id: saloneIdNext,
                   }]).select('id,inizio,fine,stato,clienti(id,nome,cognome),animali(id,nome,specie),operatori(id,nome,colore)').single();
                   if (nuovoAp) onSaved(nuovoAp);
                   setCreandoProssimo(false);

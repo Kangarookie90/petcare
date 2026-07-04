@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
+import { getSaloneId } from './syncService';
 import * as XLSX from 'xlsx';
 import OperatoriView from './OperatoriView';
 import ProfiloView   from './ProfiloView';
@@ -87,8 +88,9 @@ function ModalServizio({ servizio, onClose, onSaved, onDeleted }) {
       durata_minuti: f.durata_minuti !== '' ? Number(f.durata_minuti) : null,
       note:          f.note.trim() || null,
     };
+    const saloneId = await getSaloneId();
     const { data, error: err } = nuovo
-      ? await supabase.from('servizi').insert([payload]).select().single()
+      ? await supabase.from('servizi').insert([{ ...payload, salone_id: saloneId }]).select().single()
       : await supabase.from('servizi').update(payload).eq('id', servizio.id).select().single();
     if (err) { setError(err.message); setSaving(false); return; }
     onSaved(data);

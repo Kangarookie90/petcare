@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
+import { getSaloneId } from './syncService';
 
 // ── Stili condivisi ───────────────────────────────────────────
 const glass = {
@@ -126,6 +127,7 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
   const save = async () => {
     if (!f.nome.trim()) { setError("Inserisci il nome dell'animale"); return; }
     setLoading(true); setError('');
+    const saloneId = await getSaloneId();
     const { data, error: err } = await supabase
       .from('animali')
       .insert([{
@@ -141,6 +143,7 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
         problemi_carattere: f.problemi_carattere.trim() || null,
         note: f.note.trim() || null,
         operatore_preferito_id: f.operatore_preferito_id || null,
+        salone_id: saloneId,
       }])
       .select('*, razze(id,nome)')
       .single();
@@ -358,6 +361,7 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
     setLoading(true); setError('');
 
     // 1. Salva il cliente
+    const saloneId = await getSaloneId();
     const { data: cliente, error: errC } = await supabase
       .from('clienti')
       .insert([{
@@ -368,6 +372,7 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
         indirizzo: f.indirizzo.trim() || null,
         note: f.note.trim() || null,
         prezzo_riservato: f.prezzo_riservato !== '' ? Number(f.prezzo_riservato) : null,
+        salone_id: saloneId,
       }])
       .select()
       .single();
@@ -382,7 +387,7 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
         cliente_id: cliente.id,  // assegna il vero cliente_id
         razze: undefined,        // rimuovi join data
       }));
-      await supabase.from('animali').insert(animaliDaSalvare);
+      await supabase.from('animali').insert(animaliDaSalvare.map(a => ({ ...a, salone_id: saloneId })));
     }
 
     setLoading(false);
