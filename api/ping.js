@@ -4,8 +4,8 @@
 
 export default async function handler(req, res) {
   try {
-    const url  = process.env.VITE_SUPABASE_URL;
-    const key  = process.env.VITE_SUPABASE_ANON_KEY;
+    const url  = process.env.SUPABASE_URL;
+    const key  = process.env.SUPABASE_ANON_KEY;
 
     if (!url || !key) {
       return res.status(500).json({ error: 'Variabili d\'ambiente mancanti' });

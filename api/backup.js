@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     return res.status(401).send('Non autorizzato');
   }
 
-  const SUPABASE_URL      = process.env.VITE_SUPABASE_URL;
+  const SUPABASE_URL      = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE  = process.env.SUPABASE_SERVICE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE) {
