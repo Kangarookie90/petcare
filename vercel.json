@@ -4,12 +4,10 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/guida.html",
-      "destination": "/guida.html"
-    },
-    {
-      "source": "/((?!guida.html).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/guida.html", "destination": "/guida.html" },
+    { "source": "/((?!guida.html).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/ping", "schedule": "0 9 */3 * *" }
   ]
 }
