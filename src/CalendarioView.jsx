@@ -379,7 +379,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
       }
       setServiziCaricati(true);
       supabase.from('animali')
-        .select('id,nome,specie,cliente_id,problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata,clienti(id,nome,cognome)')
+        .select('id,nome,specie,cliente_id,problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata,operatore_preferito_id,clienti(id,nome,cognome)')
         .order('nome')
         .then(({ data }) => setTuttiAnimali(data || []));
     };
@@ -388,7 +388,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
 
   useEffect(() => {
     if (!f.cliente_id) { setAnimali([]); return; }
-    supabase.from('animali').select('id,nome,specie,razze(nome),problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata')
+    supabase.from('animali').select('id,nome,specie,razze(nome),problemi_carattere,problemi_salute,servizi_riservati_ids,durata_riservata,operatore_preferito_id')
       .eq('cliente_id', f.cliente_id).order('nome')
       .then(({ data }) => setAnimali(data || []));
   }, [f.cliente_id]);
@@ -583,6 +583,7 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
     if (!a) return;
     if (a.servizi_riservati_ids?.length > 0) { set('servizi_ids', a.servizi_riservati_ids); set('durata_auto', true); }
     if (a.durata_riservata) { set('durata_minuti', a.durata_riservata); set('durata_auto', false); }
+    if (a.operatore_preferito_id) { set('operatore_id', a.operatore_preferito_id); }
   }, [f.animali_ids, animali]);
 
   useEffect(() => {
