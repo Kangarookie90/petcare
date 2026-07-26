@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabaseClient';
+import { getSaloneId } from './syncService';
 import PetBodyMap   from './PetBodyMap';
 
 // ── Cache URL firmati (evita richieste ripetute allo storage) ──
@@ -246,8 +247,8 @@ function RazzaSearch({ razze, value, onChange, onReset }) {
 // ─────────────────────────────────────────────────────────────
 // MODALE AGGIUNGI ANIMALE
 // ─────────────────────────────────────────────────────────────
-function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
-  const [f, setF] = useState({ cliente_id:'', nome:'', specie:'cane', razza_id:'', data_nascita:'', colore:'', note:'' });
+function ModalAggiungi({ clienti, razze, operatori, onClose, onSaved }) {
+  const [f, setF] = useState({ cliente_id:'', nome:'', specie:'cane', razza_id:'', data_nascita:'', colore:'', note:'', operatore_preferito_id:'' });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const set = (k,v) => setF(p => ({...p,[k]:v}));
@@ -257,11 +258,14 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
     if (!f.cliente_id) { setError('Seleziona un proprietario'); return; }
     if (!f.nome.trim()) { setError('Inserisci il nome dell\'animale'); return; }
     setLoading(true); setError('');
+    const saloneId = await getSaloneId();
     const { data, error: err } = await supabase
       .from('animali')
       .insert([{ cliente_id:f.cliente_id, nome:f.nome.trim(), specie:f.specie,
         razza_id:f.razza_id||null, data_nascita:f.data_nascita||null,
-        colore:f.colore.trim()||null, note:f.note.trim()||null }])
+        colore:f.colore.trim()||null, note:f.note.trim()||null,
+        operatore_preferito_id:f.operatore_preferito_id||null,
+        salone_id: saloneId }])
       .select('*, clienti(id,nome,cognome), razze(id,nome)')
       .single();
     setLoading(false);
@@ -347,6 +351,17 @@ function ModalAggiungi({ clienti, razze, onClose, onSaved }) {
     <input type="text" placeholder="Es. nero, bianco..." value={f.colore} onChange={e=>set('colore',e.target.value)} style={inputStyle}/>
   </div>
 </div>
+
+        <div style={{marginBottom:14}}>
+          <div style={secLabel}>Operatore preferito</div>
+          <select value={f.operatore_preferito_id} onChange={e=>set('operatore_preferito_id',e.target.value)}
+            style={{...inputStyle,cursor:'pointer'}}>
+            <option value=''>— Nessuna preferenza —</option>
+            {operatori.map(op=>(
+              <option key={op.id} value={op.id}>{op.nome} {op.cognome||''}</option>
+            ))}
+          </select>
+        </div>
 
         <div style={{marginBottom:14}}>
           <div style={secLabel}>Note iniziali</div>
@@ -2072,7 +2087,7 @@ export default function PetView({ initialPetId, onPetOpened }) {
     <>
       <ListaAnimali animali={animali} loading={loading} onSelect={setSelected} onAdd={()=>setShowModal(true)}/>
       <AnimatePresence>
-        {showModal && <ModalAggiungi clienti={clienti} razze={razze} onClose={()=>setShowModal(false)} onSaved={handleSaved}/>}
+        {showModal && <ModalAggiungi clienti={clienti} razze={razze} operatori={operatori} onClose={()=>setShowModal(false)} onSaved={handleSaved}/>}
       </AnimatePresence>
     </>
   );

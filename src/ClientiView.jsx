@@ -126,6 +126,31 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
 
   const save = async () => {
     if (!f.nome.trim()) { setError("Inserisci il nome dell'animale"); return; }
+
+    // Se clienteId è null (animale aggiunto durante creazione nuovo cliente),
+    // non fare l'insert ora — restituisci solo i dati locali.
+    // L'insert reale avviene in ModalAggiungiCliente.save() con il cliente_id corretto.
+    if (!clienteId) {
+      const datiLocali = {
+        id: 'tmp_' + Date.now(),   // id temporaneo, verrà ignorato al salvataggio reale
+        nome: f.nome.trim(),
+        specie: f.specie,
+        razza_id: f.razza_id || null,
+        data_nascita: f.data_nascita || null,
+        colore: f.colore.trim() || null,
+        servizi_abituali: f.servizi_abituali.trim() || null,
+        preferenze_proprietario: f.preferenze_proprietario.trim() || null,
+        problemi_salute: f.problemi_salute.trim() || null,
+        problemi_carattere: f.problemi_carattere.trim() || null,
+        note: f.note.trim() || null,
+        operatore_preferito_id: f.operatore_preferito_id || null,
+        razze: razze.find(r => r.id === f.razza_id) || null,
+      };
+      onSaved(datiLocali);
+      onClose();
+      return;
+    }
+
     setLoading(true); setError('');
     const saloneId = await getSaloneId();
     const { data, error: err } = await supabase
