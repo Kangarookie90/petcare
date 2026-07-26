@@ -459,11 +459,11 @@ function ModalAppuntamento({ appuntamento, dataInizio, operatori, onClose, onSav
         operatori(id,nome,cognome,colore)
       `;
 
+      const saloneId = await getSaloneId();
       let result;
       if (isEdit) {
         result = await supabase.from('appuntamenti').update(payload).eq('id', appuntamento.id).select(SELECT).single();
       } else {
-        const saloneId = await getSaloneId();
         result = await supabase.from('appuntamenti').insert([{ ...payload, salone_id: saloneId }]).select(SELECT).single();
       }
 
