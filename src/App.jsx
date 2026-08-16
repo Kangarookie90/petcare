@@ -652,6 +652,7 @@ export default function App() {
           min-height: 100vh;
           overflow-x: hidden;
           background: #dde8f8;
+          --bg-solid: #ffffff;
         }
         .app-bg {
           position: fixed; inset: 0; z-index: 0;
@@ -669,6 +670,7 @@ export default function App() {
         @supports not (backdrop-filter: blur(1px)) {
           .sidebar { background: rgba(200,220,255,0.95); }
           .bottom-nav { background: rgba(210,228,255,0.97); }
+        .bottom-nav-drawer { background: rgba(210,228,255,0.97); }
         }
         .sidebar-logo { color: #081840; }
         .sidebar-item { color: rgba(20,50,120,0.5); }
@@ -693,7 +695,7 @@ export default function App() {
 
         /* ── DARK MODE ── */
         @media (prefers-color-scheme: dark) {
-          body { background: #0c1628; }
+          body { background: #0c1628; --bg-solid: #1a2744; }
           .app-bg {
             background:
               radial-gradient(ellipse 55% 45% at 15% 15%, rgba(30,70,160,0.7) 0%, transparent 60%),
@@ -869,19 +871,34 @@ export default function App() {
           margin: 0 auto;
           backdrop-filter: blur(40px) saturate(2);
           -webkit-backdrop-filter: blur(40px) saturate(2);
-          overflow: hidden;
+          overflow: visible;
         }
         .bottom-nav-row {
           display: flex;
           gap: 2px;
           padding: 8px 10px;
+          border-radius: 26px;
+          backdrop-filter: blur(40px) saturate(2);
+          -webkit-backdrop-filter: blur(40px) saturate(2);
+          position: relative;
+          z-index: 2;
         }
         .bottom-nav-drawer {
           display: flex;
           flex-wrap: wrap;
           gap: 2px;
-          padding: 4px 10px 10px;
-          border-top: 1px solid rgba(255,255,255,0.15);
+          padding: 10px 10px 14px;
+          border-radius: 26px 26px 0 0;
+          position: absolute;
+          bottom: 100%;
+          left: 0;
+          right: 0;
+          margin-bottom: 4px;
+          backdrop-filter: blur(40px) saturate(2);
+          -webkit-backdrop-filter: blur(40px) saturate(2);
+          background: inherit;
+          border-bottom: 1px solid rgba(255,255,255,0.15);
+          z-index: 1;
         }
         .nav-item {
           flex: 1;
@@ -1144,11 +1161,11 @@ export default function App() {
                   {navDrawerOpen && (
                     <motion.div
                       className="bottom-nav-drawer"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                      style={{ overflow: "hidden", maxWidth: "100%" }}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ maxWidth: "100%" }}
                     >
                       {NAV_EXTRA.map((item) => (
                         <motion.button

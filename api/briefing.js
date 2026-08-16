@@ -1,11 +1,14 @@
 /**
- * api/briefing.js — Vercel Serverless Function
- * Proxy verso Groq per il briefing mattutino di Nemora.
+ * api/riassunto.js — Endpoint Vercel per generazione scheda visita AI
  *
- * Stesso pattern di api/social.js già in produzione.
- * Variabile d'ambiente richiesta: GROQ_API_KEY
+ * Flusso:
+ *   1. Riceve audioUrl (signed URL Supabase) + dati pet
+ *   2. Scarica l'audio e lo manda a Groq Whisper → trascrizione
+ *   3. Manda trascrizione + dati pet a Groq Llama → scheda strutturata
+ *   4. Restituisce { trascrizione, riassunto }
  *
- * Deploy: mettere questo file in /api/briefing.js nella root del progetto.
+ * Variabili d'ambiente richieste (Vercel):
+ *   GROQ_API_KEY
  */
 
 export default async function handler(req, res) {
@@ -13,45 +16,104 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Metodo non consentito' });
   }
 
-  const { prompt } = req.body || {};
-  if (!prompt) {
-    return res.status(400).json({ error: 'Prompt mancante' });
-  }
+  const { audioUrl, pet } = req.body;
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'GROQ_API_KEY non configurata' });
+  if (!audioUrl || !pet) {
+    return res.status(400).json({ error: 'audioUrl e pet sono obbligatori' });
   }
 
   try {
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    // ── Step 1: scarica l'audio dal signed URL di Supabase Storage ──
+    const audioRes = await fetch(audioUrl);
+    if (!audioRes.ok) {
+      throw new Error(`Impossibile scaricare l'audio: ${audioRes.statusText}`);
+    }
+    const audioBuffer = await audioRes.arrayBuffer();
+
+    // ── Step 2: Groq Whisper — trascrizione audio ──
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new Blob([audioBuffer], { type: 'audio/webm' }),
+      'memo.webm'
+    );
+    formData.append('model', 'whisper-large-v3-turbo'); // veloce, ottimo per italiano
+    formData.append('language', 'it');
+    formData.append('response_format', 'json');
+
+    const whisperRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      body: formData,
+    });
+
+    if (!whisperRes.ok) {
+      const err = await whisperRes.text();
+      throw new Error(`Whisper error: ${err}`);
+    }
+
+    const { text: trascrizione } = await whisperRes.json();
+
+    if (!trascrizione || trascrizione.trim().length === 0) {
+      throw new Error('Trascrizione vuota — l\'audio potrebbe essere silenzioso');
+    }
+
+    // ── Step 3: Groq Llama — genera scheda strutturata ──
+    const righeContesto = [
+      `Nome: ${pet.nome}`,
+      `Specie: ${pet.specie}`,
+      pet.razza              ? `Razza: ${pet.razza}`                         : null,
+      pet.allergie           ? `Allergie note: ${pet.allergie}`              : null,
+      pet.farmaci_in_corso   ? `Farmaci in corso: ${pet.farmaci_in_corso}`   : null,
+      pet.comportamento_note ? `Note carattere: ${pet.comportamento_note}`   : null,
+    ].filter(Boolean).join('\n');
+
+    const prompt = `Sei un assistente per una struttura di toelettatura e cura animali.
+Hai ricevuto la nota vocale di un operatore registrata al termine di una visita.
+
+Dati del pet:
+${righeContesto}
+
+Nota vocale trascritta:
+"${trascrizione}"
+
+Genera una scheda visita professionale, concisa e in italiano.
+Usa esattamente questo formato (ometti le sezioni non menzionate nella nota):
+
+🐾 SCHEDA VISITA
+Servizi effettuati: ...
+Osservazioni: ...
+Da monitorare: ...
+Note per prossima visita: ...
+
+Sii diretto. Non aggiungere sezioni non presenti nella nota vocale.`;
+
+    const llmRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization:  `Bearer ${process.env.GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model:       'llama-3.1-8b-instant', // veloce, economico, ottimo per testi brevi
-        max_tokens:  300,                    // briefing max 4 righe — 300 token bastano
-        temperature: 0.65,                   // un po' di calore ma non troppo creativo
-        messages: [
-          { role: 'user', content: prompt },
-        ],
+        model:       'llama-3.3-70b-versatile',
+        messages:    [{ role: 'user', content: prompt }],
+        max_tokens:  450,
+        temperature: 0.3,
       }),
     });
 
-    const data = await groqRes.json();
-
-    if (!groqRes.ok) {
-      const msg = data?.error?.message || `Errore Groq ${groqRes.status}`;
-      return res.status(502).json({ error: msg });
+    if (!llmRes.ok) {
+      const err = await llmRes.text();
+      throw new Error(`LLM error: ${err}`);
     }
 
-    const text = data.choices?.[0]?.message?.content || '';
-    return res.status(200).json({ text });
+    const llmData = await llmRes.json();
+    const riassunto = llmData.choices?.[0]?.message?.content || '';
 
-  } catch (err) {
-    console.error('[briefing] Errore fetch Groq:', err);
-    return res.status(500).json({ error: 'Errore di rete verso Groq' });
+    return res.status(200).json({ trascrizione, riassunto });
+
+  } catch (e) {
+    console.error('[riassunto] Errore:', e.message);
+    return res.status(500).json({ error: e.message });
   }
 }

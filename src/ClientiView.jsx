@@ -152,7 +152,18 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
     }
 
     setLoading(true); setError('');
-    const saloneId = await getSaloneId();
+
+    // getSaloneId() legge da _meta locale — se non ancora popolato,
+    // recuperiamo il salone_id direttamente dal cliente a cui stiamo aggiungendo l'animale
+    let saloneId = await getSaloneId();
+    if (!saloneId && clienteId) {
+      const { data: cl } = await supabase
+        .from('clienti').select('salone_id').eq('id', clienteId).single();
+      saloneId = cl?.salone_id ?? null;
+    }
+
+    if (!saloneId) { setLoading(false); setError('Salone non trovato — ricarica la pagina'); return; }
+
     const { data, error: err } = await supabase
       .from('animali')
       .insert([{
@@ -233,13 +244,11 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
           {razzaOpen && razzeSuggerite.length > 0 && (
             <div style={{
               position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-              background: 'var(--card-bg)',
+              background: 'var(--bg-solid)',
               border: '1px solid var(--card-border)',
               borderRadius: 14, marginTop: 4,
-              boxShadow: '0 8px 24px rgba(8,20,80,0.14)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
               maxHeight: 220, overflowY: 'auto',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
             }}>
               {/* Opzione "nessuna razza" */}
               <div
@@ -299,13 +308,40 @@ function ModalAggiungiAnimale({ clienteId, clienteNome, razze, operatori, onClos
       </div>
 
       {/* Operatore preferito */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={secLabel}>Operatore preferito</div>
-        <select value={f.operatore_preferito_id} onChange={e => set('operatore_preferito_id', e.target.value)} style={inputStyle}>
-          <option value="">Nessuna preferenza</option>
-          {operatori.map(o => <option key={o.id} value={o.id}>{o.nome} {o.cognome}</option>)}
-        </select>
-      </div>
+      {operatori.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={secLabel}>Operatore preferito</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+            <button
+              onClick={() => set('operatore_preferito_id', '')}
+              style={{
+                padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                border: '1px solid var(--card-border)', cursor: 'pointer', fontFamily: 'inherit',
+                background: !f.operatore_preferito_id ? 'var(--green)' : 'transparent',
+                color: !f.operatore_preferito_id ? '#fff' : 'var(--text-muted)',
+                transition: 'all 0.15s',
+              }}
+            >
+              Nessuno
+            </button>
+            {operatori.map(o => (
+              <button
+                key={o.id}
+                onClick={() => set('operatore_preferito_id', o.id)}
+                style={{
+                  padding: '7px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                  border: '1px solid var(--card-border)', cursor: 'pointer', fontFamily: 'inherit',
+                  background: f.operatore_preferito_id === o.id ? 'var(--green)' : 'transparent',
+                  color: f.operatore_preferito_id === o.id ? '#fff' : 'var(--text-primary)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {o.nome}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Servizi abituali */}
       <div style={{ marginBottom: 14 }}>
@@ -406,13 +442,13 @@ function ModalAggiungiCliente({ razze, operatori, onClose, onSaved }) {
 
     // 2. Se ci sono animali da aggiungere, li salva con il cliente_id appena creato
     if (animali.length > 0) {
-      const animaliDaSalvare = animali.map(a => ({
+      const animaliDaSalvare = animali.map(({ id: _id, razze: _razze, ...a }) => ({
         ...a,
-        id: undefined,           // rimuovi id temporaneo
-        cliente_id: cliente.id,  // assegna il vero cliente_id
-        razze: undefined,        // rimuovi join data
+        cliente_id: cliente.id,
+        salone_id:  saloneId,
       }));
-      await supabase.from('animali').insert(animaliDaSalvare.map(a => ({ ...a, salone_id: saloneId })));
+      const { error: errA } = await supabase.from('animali').insert(animaliDaSalvare);
+      if (errA) console.error('[ClientiView] insert animali:', errA.message);
     }
 
     setLoading(false);
